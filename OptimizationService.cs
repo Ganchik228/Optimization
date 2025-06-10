@@ -158,28 +158,6 @@ namespace Optimizations
                     RecurseVariants(0, new Dictionary<string, double>());
                     Console.WriteLine($"Блок {firstSemester}+{secondSemester}: проверено вариантов {totalVariantsChecked}, найдено подходящих {localVariants.Count}, отклонено {rejectedVariantsCount}");
 
-                    // Если не найдено вариантов, создаем хотя бы один базовый
-                    if (localVariants.Count == 0)
-                    {
-                        Console.WriteLine($"ВНИМАНИЕ: Для блока {firstSemester}+{secondSemester} не найдено подходящих вариантов. Создаем базовый вариант.");
-                        
-                        // Создаем базовый вариант с минимальными значениями
-                        var baseValidVariant = new Dictionary<string, double>();
-                        foreach (var discipline in blockDisciplines)
-                        {
-                            baseValidVariant[discipline.UniqueName] = discipline.MinWorkload;
-                        }
-                        
-                        double baseObjectiveFirst = blockDisciplines.Where(d => d.Semester == firstSemester).Sum(d => d.MinWorkload * d.SignificanceCoefficient);
-                        double baseObjectiveSecond = blockDisciplines.Where(d => d.Semester == secondSemester).Sum(d => d.MinWorkload * d.SignificanceCoefficient);
-                        
-                        localVariants.Add(new BlockVariant
-                        {
-                            Values = baseValidVariant,
-                            SumsBySemester = new[] { baseObjectiveFirst, baseObjectiveSecond }
-                        });
-                    }
-
                     var topTenVariants = localVariants
                         .OrderByDescending(variant => variant.SumsBySemester[0] * variant.SumsBySemester[1])
                         .Take(10)
