@@ -270,7 +270,6 @@ namespace Optimizations
             }
             currentRow++;
 
-            // Calculate sums for each semester and year
             var semesterSums = new Dictionary<int, double>();
             for (int sem = 1; sem <= 8; sem++)
             {
@@ -292,13 +291,11 @@ namespace Optimizations
 
             foreach (var discipline in sortedDisciplines)
             {
-                // Add year header if we're starting a new year
                 int disciplineYear = (discipline.Semester + 1) / 2;
                 if (disciplineYear != currentYear)
                 {
                     currentYear = disciplineYear;
                     
-                    // Year summary row
                     worksheet.Cells[currentRow, 1].Value = $"ГОД {currentYear}";
                     worksheet.Cells[currentRow, 2].Value = "";
                     worksheet.Cells[currentRow, 3].Value = yearSums[currentYear];
@@ -329,14 +326,12 @@ namespace Optimizations
                     currentRow++;
                 }
 
-                // Add discipline row with indentation
                 worksheet.Cells[currentRow, 1].Value = $"    {discipline.Name}";
                 worksheet.Cells[currentRow, 2].Value = discipline.Semester;
                 worksheet.Cells[currentRow, 3].Value = variant[discipline.UniqueName];
                 currentRow++;
             }
 
-            // Add total sum row
             var totalSum = yearSums.Values.Sum();
             worksheet.Cells[currentRow, 1].Value = "ИТОГО:";
             worksheet.Cells[currentRow, 2].Value = "";

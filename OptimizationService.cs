@@ -30,7 +30,6 @@ namespace Optimizations
                     var blockDisciplines = disciplines.Where(discipline => discipline.Semester == firstSemester || discipline.Semester == secondSemester).ToList();
                     Console.WriteLine($"Блок {firstSemester}+{secondSemester}: дисциплин {blockDisciplines.Count}");
                     
-                    // Диагностика: проверяем есть ли дисциплины в блоке
                     if (blockDisciplines.Count == 0)
                     {
                         Console.WriteLine($"ВНИМАНИЕ: Блок {firstSemester}+{secondSemester} не содержит дисциплин!");
@@ -45,7 +44,6 @@ namespace Optimizations
                     var variableDisciplines = blockDisciplines.Where(discipline => Math.Abs(discipline.MinWorkload - discipline.MaxWorkload) > 0.001).ToList();
                     Console.WriteLine($"Блок {firstSemester}+{secondSemester}: фиксированных {fixedDisciplines.Count}, переменных {variableDisciplines.Count}");
 
-                    // Диагностика: проверяем сумму фиксированных дисциплин
                     var fixedSum = fixedDisciplines.Sum(d => d.MinWorkload);
                     var minVariableSum = variableDisciplines.Sum(d => d.MinWorkload);
                     var maxVariableSum = variableDisciplines.Sum(d => d.MaxWorkload);
@@ -56,7 +54,6 @@ namespace Optimizations
                     Console.WriteLine($"Блок {firstSemester}+{secondSemester}: возможный диапазон общей суммы = {totalMinSum:F1} - {totalMaxSum:F1}");
                     Console.WriteLine($"Блок {firstSemester}+{secondSemester}: целевая сумма = {targetSum:F1}");
                     
-                    // Проверяем, возможно ли достичь целевой суммы
                     if (targetSum < totalMinSum - 0.1 || targetSum > totalMaxSum + 0.1)
                     {
                         Console.WriteLine($"КРИТИЧЕСКАЯ ОШИБКА: Целевая сумма {targetSum} недостижима для блока {firstSemester}+{secondSemester}!");
@@ -103,7 +100,6 @@ namespace Optimizations
                             bool isValidVariant = true;
                             string rejectionReason = "";
                             
-                            // Увеличиваем допуск для целевой суммы
                             if (Math.Abs(sumWithoutExcluded - targetSum) > 0.5)
                             {
                                 isValidVariant = false;
