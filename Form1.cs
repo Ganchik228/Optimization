@@ -15,11 +15,17 @@ using System.Collections.Concurrent;
 namespace Optimizations
 {
     public partial class Form1 : Form
-    {
-        public Form1()
+    {        public Form1()
         {
             InitializeComponent();
-        }        public class Discipline
+            
+            statusLabel.Text = "Готов к работе";
+            progressBar.Visible = false;
+            
+            button3.Enabled = false;
+            
+            this.Icon = SystemIcons.Application;
+        }public class Discipline
         {
             public string Name { get; set; } = "";
             public double MinWorkload { get; set; }
@@ -28,11 +34,19 @@ namespace Optimizations
             public int Semester { get; set; }
             public int Index { get; set; }
             public string UniqueName => $"{Name} (семестр {Semester}) - {Index}";
-        }
-
-        public static async Task<List<Discipline>> ReadExcelDataAsync(string filePath, string? worksheetName = null)
+        }        public static async Task<List<Discipline>> ReadExcelDataAsync(string filePath, string? worksheetName = null)
         {
             var disciplines = new List<Discipline>();
+            var parsingStats = new Dictionary<string, int>
+            {
+                ["Общее количество строк"] = 0,
+                ["Успешно обработано"] = 0,
+                ["Пропущено: пустое название"] = 0,
+                ["Пропущено: пустые значения"] = 0,
+                ["Пропущено: неверный формат чисел"] = 0,
+                ["Пропущено: неверный семестр"] = 0,
+                ["Пропущено: прочие ошибки"] = 0
+            };
 
             if (!File.Exists(filePath))
             {
@@ -64,22 +78,20 @@ namespace Optimizations
                 if (worksheet.Dimension == null)
                 {
                     throw new InvalidOperationException("Рабочий лист пуст");
-                }
+                }                int totalRows = worksheet.Dimension.Rows;
+                int totalColumns = worksheet.Dimension.Columns;
+                parsingStats["Общее количество строк"] = totalRows - 1; // Исключаем заголовок
 
-                int rowCount = worksheet.Dimension.Rows;
-                int colCount = worksheet.Dimension.Columns;
-
-                if (rowCount < 2)
+                if (totalRows < 2)
                 {
                     throw new InvalidOperationException("В файле недостаточно данных (нужно минимум 2 строки)");
                 }
 
-                if (colCount < 5)
+                if (totalColumns < 5)
                 {
                     throw new InvalidOperationException("В файле недостаточно столбцов (нужно минимум 5 столбцов)");
                 }
-
-                var headers = new[]
+                var columnHeaders = new[]
                 {
                     worksheet.Cells[1, 1].Text,
                     worksheet.Cells[1, 2].Text,
@@ -88,94 +100,110 @@ namespace Optimizations
                     worksheet.Cells[1, 5].Text
                 };
 
-                Console.WriteLine("Заголовки столбцов:");
-                for (int i = 0; i < headers.Length; i++)
+                // Собираем примеры данных из первых нескольких строк для анализа типов
+                var columnExamples = new List<string>[5];
+                for (int i = 0; i < 5; i++)
                 {
-                    Console.WriteLine($"Столбец {i + 1}: {headers[i]}");
-                }                var tasks = new List<Task>();
+                    columnExamples[i] = new List<string>();
+                }
+
+                // Берем примеры из первых 5 строк данных (не включая заголовок)
+                for (int rowIndex = 2; rowIndex <= Math.Min(totalRows, 6); rowIndex++)
+                {
+                    for (int colIndex = 1; colIndex <= 5; colIndex++)
+                    {
+                        var cellValue = worksheet.Cells[rowIndex, colIndex]?.Text ?? "";
+                        columnExamples[colIndex - 1].Add(cellValue);
+                    }
+                }
+
+                Console.WriteLine("Заголовки столбцов:");
+                for (int columnIndex = 0; columnIndex < columnHeaders.Length; columnIndex++)
+                {
+                    Console.WriteLine($"Столбец {columnIndex + 1}: {columnHeaders[columnIndex]}");
+                }
+                var tasks = new List<Task>();
                 var disciplineIndex = 0;
                 var indexLock = new object();
-                
-                for (int row = 2; row <= rowCount; row++)
+                for (int rowIndex = 2; rowIndex <= totalRows; rowIndex++)
                 {
-                    var currentRow = row;
+                    var currentRowIndex = rowIndex;
                     tasks.Add(Task.Run(() =>
                     {
                         try
                         {
-                            if (currentRow > rowCount)
+                            if (currentRowIndex > totalRows)
                             {
-                                Console.WriteLine($"Пропуск строки {currentRow}: строка за пределами диапазона");
+                                Console.WriteLine($"Пропуск строки {currentRowIndex}: строка за пределами диапазона");
+                                return;
+                            }                            var disciplineName = worksheet.Cells[currentRowIndex, 1]?.Text;
+                            if (string.IsNullOrWhiteSpace(disciplineName))
+                            {
+                                Console.WriteLine($"Пропуск строки {currentRowIndex}: пустое название дисциплины");
+                                lock (parsingStats) { parsingStats["Пропущено: пустое название"]++; }
                                 return;
                             }
 
-                            var name = worksheet.Cells[currentRow, 1]?.Text;
-                            if (string.IsNullOrWhiteSpace(name))
+                            var minWorkloadText = worksheet.Cells[currentRowIndex, 2]?.Text;
+                            var maxWorkloadText = worksheet.Cells[currentRowIndex, 3]?.Text;
+                            var significanceText = worksheet.Cells[currentRowIndex, 4]?.Text;
+                            var semesterText = worksheet.Cells[currentRowIndex, 5]?.Text;                            if (string.IsNullOrWhiteSpace(minWorkloadText) ||
+                                string.IsNullOrWhiteSpace(maxWorkloadText) ||
+                                string.IsNullOrWhiteSpace(significanceText) ||
+                                string.IsNullOrWhiteSpace(semesterText))
                             {
-                                Console.WriteLine($"Пропуск строки {currentRow}: пустое название дисциплины");
+                                Console.WriteLine($"Пропуск строки {currentRowIndex}: пустые значения в ячейках");
+                                lock (parsingStats) { parsingStats["Пропущено: пустые значения"]++; }
                                 return;
                             }
 
-                            var minWorkloadStr = worksheet.Cells[currentRow, 2]?.Text;
-                            var maxWorkloadStr = worksheet.Cells[currentRow, 3]?.Text;
-                            var significanceStr = worksheet.Cells[currentRow, 4]?.Text;
-                            var semesterStr = worksheet.Cells[currentRow, 5]?.Text;
-
-                            if (string.IsNullOrWhiteSpace(minWorkloadStr) ||
-                                string.IsNullOrWhiteSpace(maxWorkloadStr) ||
-                                string.IsNullOrWhiteSpace(significanceStr) ||
-                                string.IsNullOrWhiteSpace(semesterStr))
-                            {
-                                Console.WriteLine($"Пропуск строки {currentRow}: пустые значения в ячейках");
-                                return;
-                            }
-
-                            double minWorkload, maxWorkload, significance;
-                            int semester;
+                            double minWorkload, maxWorkload, significanceCoefficient;
+                            int semesterNumber;
 
                             try
                             {
-                                minWorkload = double.Parse(minWorkloadStr.Replace(",", "."), CultureInfo.InvariantCulture);
-                                maxWorkload = double.Parse(maxWorkloadStr.Replace(",", "."), CultureInfo.InvariantCulture);
-                                significance = double.Parse(significanceStr.Replace(",", "."), CultureInfo.InvariantCulture);
-                                semester = (int)double.Parse(semesterStr.Replace(",", "."), CultureInfo.InvariantCulture);
-                            }
-                            catch (FormatException)
+                                minWorkload = double.Parse(minWorkloadText.Replace(",", "."), CultureInfo.InvariantCulture);
+                                maxWorkload = double.Parse(maxWorkloadText.Replace(",", "."), CultureInfo.InvariantCulture);
+                                significanceCoefficient = double.Parse(significanceText.Replace(",", "."), CultureInfo.InvariantCulture);
+                                semesterNumber = (int)double.Parse(semesterText.Replace(",", "."), CultureInfo.InvariantCulture);
+                            }                            catch (FormatException)
                             {
-                                Console.WriteLine($"Пропуск строки {currentRow}: некорректный формат числовых значений");
+                                Console.WriteLine($"Пропуск строки {currentRowIndex}: некорректный формат числовых значений");
+                                lock (parsingStats) { parsingStats["Пропущено: неверный формат чисел"]++; }
                                 return;
                             }
 
-                            if (semester < 1 || semester > 8)
+                            if (semesterNumber < 1 || semesterNumber > 8)
                             {
-                                Console.WriteLine($"Пропуск строки {currentRow}: некорректный номер семестра ({semester})");
+                                Console.WriteLine($"Пропуск строки {currentRowIndex}: некорректный номер семестра ({semesterNumber})");
+                                lock (parsingStats) { parsingStats["Пропущено: неверный семестр"]++; }
                                 return;
                             }
 
-                            int currentIndex;
+                            int currentDisciplineIndex;
                             lock (indexLock)
                             {
-                                currentIndex = disciplineIndex++;
+                                currentDisciplineIndex = disciplineIndex++;
                             }
 
-                            var discipline = new Discipline
+                            var newDiscipline = new Discipline
                             {
-                                Name = name,
+                                Name = disciplineName,
                                 MinWorkload = minWorkload,
                                 MaxWorkload = maxWorkload,
-                                SignificanceCoefficient = significance,
-                                Semester = semester,
-                                Index = currentIndex
-                            };
-
-                            lock (disciplines)
+                                SignificanceCoefficient = significanceCoefficient,
+                                Semester = semesterNumber,
+                                Index = currentDisciplineIndex
+                            };                            lock (disciplines)
                             {
-                                disciplines.Add(discipline);
+                                disciplines.Add(newDiscipline);
+                                parsingStats["Успешно обработано"]++;
                             }
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"Ошибка при обработке строки {currentRow}: {ex.Message}");
+                            Console.WriteLine($"Ошибка при обработке строки {currentRowIndex}: {ex.Message}");
+                            lock (parsingStats) { parsingStats["Пропущено: прочие ошибки"]++; }
                         }
                     }));
                 }
@@ -185,9 +213,11 @@ namespace Optimizations
             if (disciplines.Count == 0)
             {
                 throw new InvalidOperationException("Не удалось прочитать ни одной дисциплины из файла");
-            }
-
-            Console.WriteLine($"\nУспешно прочитано дисциплин: {disciplines.Count}");
+            }            Console.WriteLine($"\nУспешно прочитано дисциплин: {disciplines.Count}");
+            
+            // Показываем информацию о парсинге в MessageBox
+            ShowParsingInfo(disciplines, parsingStats);
+            
             return disciplines;
         }
         
@@ -204,294 +234,305 @@ namespace Optimizations
                 };
 
                 var blockVariants = new List<List<BlockVariant>>(semesterPairs.Count);
-                var blockVariantsLock = new object();
-
-                Parallel.ForEach(semesterPairs, pair =>
+                var blockVariantsLock = new object();                Parallel.ForEach(semesterPairs, semesterPair =>
                 {
-                    var (sem1, sem2, targetSum) = pair;
-                    var blockDisciplines = disciplines.Where(d => d.Semester == sem1 || d.Semester == sem2).ToList();
-                    Console.WriteLine($"Блок {sem1}+{sem2}: дисциплин {blockDisciplines.Count}");
-                    var fixedBlock = blockDisciplines.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) < 0.001).ToList();
-                    var variableBlock = blockDisciplines.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) > 0.001).ToList();
-                    Console.WriteLine($"Блок {sem1}+{sem2}: фиксированных {fixedBlock.Count}, переменных {variableBlock.Count}");
+                    var (firstSemester, secondSemester, targetSum) = semesterPair;
+                    var blockDisciplines = disciplines.Where(discipline => discipline.Semester == firstSemester || discipline.Semester == secondSemester).ToList();
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: дисциплин {blockDisciplines.Count}");
+                    var fixedDisciplines = blockDisciplines.Where(discipline => Math.Abs(discipline.MinWorkload - discipline.MaxWorkload) < 0.001).ToList();
+                    var variableDisciplines = blockDisciplines.Where(discipline => Math.Abs(discipline.MinWorkload - discipline.MaxWorkload) > 0.001).ToList();
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: фиксированных {fixedDisciplines.Count}, переменных {variableDisciplines.Count}");
 
-                    var baseVariant = fixedBlock.ToDictionary(d => d.UniqueName, d => d.MinWorkload);
-                    var valueOptions = variableBlock
-                        .Select(d => GeneratePossibleValues(d.MinWorkload, d.MaxWorkload))
+                    var baseVariant = fixedDisciplines.ToDictionary(discipline => discipline.UniqueName, discipline => discipline.MinWorkload);
+                    var valueOptionsList = variableDisciplines
+                        .Select(discipline => GeneratePossibleValues(discipline.MinWorkload, discipline.MaxWorkload))
                         .ToList();
-                    if (variableBlock.Count > 0)
-                        Console.WriteLine($"Блок {sem1}+{sem2}: всего комбинаций {valueOptions.Select(l => l.Count).Aggregate(1, (a, b) => a * b)}");
+                    if (variableDisciplines.Count > 0)
+                        Console.WriteLine($"Блок {firstSemester}+{secondSemester}: всего комбинаций {valueOptionsList.Select(optionList => optionList.Count).Aggregate(1, (accumulator, count) => accumulator * count)}");
 
                     var localVariants = new List<BlockVariant>();
-                    int rejectedCount = 0;
+                    int rejectedVariantsCount = 0;
 
-                    void Recurse(int idx, Dictionary<string, double> current)
+                    void RecurseVariants(int disciplineIndex, Dictionary<string, double> currentVariant)
                     {
-                        if (idx == variableBlock.Count)
+                        if (disciplineIndex == variableDisciplines.Count)
                         {
-                            var excludedNames = new HashSet<string> { "Онтологическое моделирование", "Проектирование пользовательского интерфейса" };
-                            double sumSem1 = 0, sumSem2 = 0, sumPair = 0, excludedSum = 0;
-                            foreach (var d in blockDisciplines)
+                            var excludedDisciplineNames = new HashSet<string> { "Онтологическое моделирование", "Проектирование пользовательского интерфейса" };
+                            double sumFirstSemester = 0, sumSecondSemester = 0, sumPair = 0, excludedSum = 0;
+                            foreach (var discipline in blockDisciplines)
                             {
-                                double v = baseVariant.ContainsKey(d.UniqueName) ? baseVariant[d.UniqueName] : (current.ContainsKey(d.UniqueName) ? current[d.UniqueName] : 0);
-                                if (d.Semester == sem1) sumSem1 += v;
-                                if (d.Semester == sem2) sumSem2 += v;
-                                if (d.Semester == sem1 || d.Semester == sem2)
+                                double workloadValue = baseVariant.ContainsKey(discipline.UniqueName) ? baseVariant[discipline.UniqueName] : (currentVariant.ContainsKey(discipline.UniqueName) ? currentVariant[discipline.UniqueName] : 0);
+                                if (discipline.Semester == firstSemester) sumFirstSemester += workloadValue;
+                                if (discipline.Semester == secondSemester) sumSecondSemester += workloadValue;
+                                if (discipline.Semester == firstSemester || discipline.Semester == secondSemester)
                                 {
-                                    sumPair += v;
-                                    if (excludedNames.Contains(d.Name))
-                                        excludedSum += v;
+                                    sumPair += workloadValue;
+                                    if (excludedDisciplineNames.Contains(discipline.Name))
+                                        excludedSum += workloadValue;
                                 }
                             }
 
                             double sumWithoutExcluded = sumPair - excludedSum;
-                            bool ok = true;
-                            string reason = "";
+                            bool isValidVariant = true;
+                            string rejectionReason = "";
                             if (Math.Abs(sumWithoutExcluded - targetSum) > 0.001)
                             {
-                                ok = false;
-                                reason = $"Сумма (без исключённых) {sumWithoutExcluded} != {targetSum}";
+                                isValidVariant = false;
+                                rejectionReason = $"Сумма (без исключённых) {sumWithoutExcluded} != {targetSum}";
                             }
-                            else if (Math.Abs(sumSem1 - sumSem2) > 6)
+                            else if (Math.Abs(sumFirstSemester - sumSecondSemester) > 6)
                             {
-                                ok = false;
-                                reason = $"Разница между семестрами {Math.Abs(sumSem1 - sumSem2)} > 6";
+                                isValidVariant = false;
+                                rejectionReason = $"Разница между семестрами {Math.Abs(sumFirstSemester - sumSecondSemester)} > 6";
                             }
 
-                            if (!ok)
+                            if (!isValidVariant)
                             {
-                                if (rejectedCount < 5)
+                                if (rejectedVariantsCount < 5)
                                 {
-                                    var allVals = new Dictionary<string, double>(baseVariant);
-                                    foreach (var kv in current) allVals[kv.Key] = kv.Value;
-                                    string values = string.Join(", ", allVals.Select(kv => $"{kv.Key}:{kv.Value}"));
-                                    rejectedCount++;
+                                    var allWorkloadValues = new Dictionary<string, double>(baseVariant);
+                                    foreach (var keyValue in currentVariant) allWorkloadValues[keyValue.Key] = keyValue.Value;
+                                    string workloadValuesText = string.Join(", ", allWorkloadValues.Select(keyValue => $"{keyValue.Key}:{keyValue.Value}"));
+                                    rejectedVariantsCount++;
                                 }
                                 return;
                             }
 
-                            var variant = new Dictionary<string, double>(baseVariant);
-                            foreach (var kv in current) variant[kv.Key] = kv.Value;
+                            var validVariant = new Dictionary<string, double>(baseVariant);
+                            foreach (var keyValue in currentVariant) validVariant[keyValue.Key] = keyValue.Value;
 
-                            double objSem1 = 0, objSem2 = 0;
-                            foreach (var d in blockDisciplines)
+                            double objectiveFirstSemester = 0, objectiveSecondSemester = 0;
+                            foreach (var discipline in blockDisciplines)
                             {
-                                double v = variant[d.UniqueName];
-                                if (d.Semester == sem1) objSem1 += v * d.SignificanceCoefficient;
-                                if (d.Semester == sem2) objSem2 += v * d.SignificanceCoefficient;
+                                double workloadValue = validVariant[discipline.UniqueName];
+                                if (discipline.Semester == firstSemester) objectiveFirstSemester += workloadValue * discipline.SignificanceCoefficient;
+                                if (discipline.Semester == secondSemester) objectiveSecondSemester += workloadValue * discipline.SignificanceCoefficient;
                             }
 
                             lock (localVariants)
                             {
                                 localVariants.Add(new BlockVariant
                                 {
-                                    Values = variant,
-                                    SumsBySemester = new[] { objSem1, objSem2 }
+                                    Values = validVariant,
+                                    SumsBySemester = new[] { objectiveFirstSemester, objectiveSecondSemester }
                                 });
                             }
                             return;
                         }
-                        var disc = variableBlock[idx];
-                        foreach (var value in valueOptions[idx])
+                        var currentDiscipline = variableDisciplines[disciplineIndex];
+                        foreach (var workloadValue in valueOptionsList[disciplineIndex])
                         {
-                            current[disc.UniqueName] = value;
-                            Recurse(idx + 1, current);
-                            current.Remove(disc.UniqueName);
+                            currentVariant[currentDiscipline.UniqueName] = workloadValue;
+                            RecurseVariants(disciplineIndex + 1, currentVariant);
+                            currentVariant.Remove(currentDiscipline.UniqueName);
                         }
                     }
 
-                    Recurse(0, new Dictionary<string, double>());
-                    Console.WriteLine($"Блок {sem1}+{sem2}: найдено вариантов {localVariants.Count}");
+                    RecurseVariants(0, new Dictionary<string, double>());
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: найдено вариантов {localVariants.Count}");
 
-                    var top10 = localVariants
-                        .OrderByDescending(v => v.SumsBySemester[0] * v.SumsBySemester[1])
+                    var topTenVariants = localVariants
+                        .OrderByDescending(variant => variant.SumsBySemester[0] * variant.SumsBySemester[1])
                         .Take(10)
                         .ToList();
 
-                    Console.WriteLine($"Блок {sem1}+{sem2}: отобрано топ-10 вариантов");
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: отобрано топ-10 вариантов");
                     lock (blockVariantsLock)
                     {
-                        blockVariants.Add(top10);
+                        blockVariants.Add(topTenVariants);
                     }
-                });
+                });                var allResultVariants = new ConcurrentBag<Dictionary<string, double>>();
+                int totalBlocks = blockVariants.Count;
+                var blockSizes = blockVariants.Select(blockVariantList => blockVariantList.Count).ToArray();
+                long totalCombinations = blockSizes.Aggregate(1L, (accumulator, size) => accumulator * size);
+                Console.WriteLine($"Итоговое число комбинаций: {totalCombinations}");
 
-                var allResults = new ConcurrentBag<Dictionary<string, double>>();
-                int blockCount = blockVariants.Count;
-                var blockLengths = blockVariants.Select(b => b.Count).ToArray();
-                long totalComb = blockLengths.Aggregate(1L, (a, b) => a * b);
-                Console.WriteLine($"Итоговое число комбинаций: {totalComb}");
-
-                int maxTop = 100;
-                var globalTop = new SortedSet<(double, Dictionary<string, double>)>(Comparer<(double, Dictionary<string, double>)>.Create((a, b) =>
+                int maxTopVariants = 100;
+                var globalTopVariants = new SortedSet<(double objectiveValue, Dictionary<string, double> variant)>(Comparer<(double, Dictionary<string, double>)>.Create((firstItem, secondItem) =>
                 {
-                    int cmp = a.Item1.CompareTo(b.Item1);
-                    if (cmp == 0)
-                        return a.Item2.GetHashCode().CompareTo(b.Item2.GetHashCode());
-                    return cmp;
+                    int comparison = firstItem.Item1.CompareTo(secondItem.Item1);
+                    if (comparison == 0)
+                        return firstItem.Item2.GetHashCode().CompareTo(secondItem.Item2.GetHashCode());
+                    return comparison;
                 }));
-                object topLock = new object();
+                object topVariantsLock = new object();
 
                 Parallel.ForEach(
-                    Partitioner.Create(0L, totalComb),
-                    () => new SortedSet<(double, Dictionary<string, double>)>(Comparer<(double, Dictionary<string, double>)>.Create((a, b) =>
+                    Partitioner.Create(0L, totalCombinations),
+                    () => new SortedSet<(double objectiveValue, Dictionary<string, double> variant)>(Comparer<(double, Dictionary<string, double>)>.Create((firstItem, secondItem) =>
                     {
-                        int cmp = a.Item1.CompareTo(b.Item1);
-                        if (cmp == 0)
-                            return a.Item2.GetHashCode().CompareTo(b.Item2.GetHashCode());
-                        return cmp;
+                        int comparison = firstItem.Item1.CompareTo(secondItem.Item1);
+                        if (comparison == 0)
+                            return firstItem.Item2.GetHashCode().CompareTo(secondItem.Item2.GetHashCode());
+                        return comparison;
                     })),
-                    (range, state, localTop) =>
+                    (combinationRange, loopState, threadLocalTopVariants) =>
                     {
-                        for (long idx = range.Item1; idx < range.Item2; idx++)
+                        for (long combinationIndex = combinationRange.Item1; combinationIndex < combinationRange.Item2; combinationIndex++)
                         {
-                            var indices = new int[blockCount];
-                            long t = idx;
-                            for (int i = blockCount - 1; i >= 0; i--)
+                            var blockIndices = new int[totalBlocks];
+                            long tempIndex = combinationIndex;
+                            for (int blockIndex = totalBlocks - 1; blockIndex >= 0; blockIndex--)
                             {
-                                indices[i] = (int)(t % blockLengths[i]);
-                                t /= blockLengths[i];
+                                blockIndices[blockIndex] = (int)(tempIndex % blockSizes[blockIndex]);
+                                tempIndex /= blockSizes[blockIndex];
                             }
 
-                            var variant = new Dictionary<string, double>();
-                            double obj = 1.0;
-                            for (int b = 0; b < blockCount; b++)
+                            var combinedVariant = new Dictionary<string, double>();
+                            double objectiveValue = 1.0;
+                            for (int blockIndex = 0; blockIndex < totalBlocks; blockIndex++)
                             {
-                                var blockVar = blockVariants[b][indices[b]];
-                                foreach (var kv in blockVar.Values)
-                                    variant[kv.Key] = kv.Value;
-                                obj *= (blockVar.SumsBySemester[0] + blockVar.SumsBySemester[1]);
+                                var selectedBlockVariant = blockVariants[blockIndex][blockIndices[blockIndex]];
+                                foreach (var workloadPair in selectedBlockVariant.Values)
+                                    combinedVariant[workloadPair.Key] = workloadPair.Value;
+                                objectiveValue *= (selectedBlockVariant.SumsBySemester[0] + selectedBlockVariant.SumsBySemester[1]);
                             }
 
-                            if (localTop.Count < maxTop)
+                            if (threadLocalTopVariants.Count < maxTopVariants)
                             {
-                                localTop.Add((obj, variant));
+                                threadLocalTopVariants.Add((objectiveValue, combinedVariant));
                             }
-                            else if (obj > localTop.Min.Item1)
+                            else if (objectiveValue > threadLocalTopVariants.Min.Item1)
                             {
-                                localTop.Remove(localTop.Min);
-                                localTop.Add((obj, variant));
+                                threadLocalTopVariants.Remove(threadLocalTopVariants.Min);
+                                threadLocalTopVariants.Add((objectiveValue, combinedVariant));
                             }
                         }
-                        return localTop;
+                        return threadLocalTopVariants;
                     },
-                    localTop =>
+                    threadLocalTopVariants =>
                     {
-                        lock (topLock)
+                        lock (topVariantsLock)
                         {
-                            foreach (var item in localTop)
+                            foreach (var topVariant in threadLocalTopVariants)
                             {
-                                if (globalTop.Count < maxTop)
+                                if (globalTopVariants.Count < maxTopVariants)
                                 {
-                                    globalTop.Add(item);
+                                    globalTopVariants.Add(topVariant);
                                 }
-                                else if (item.Item1 > globalTop.Min.Item1)
+                                else if (topVariant.Item1 > globalTopVariants.Min.Item1)
                                 {
-                                    globalTop.Remove(globalTop.Min);
-                                    globalTop.Add(item);
+                                    globalTopVariants.Remove(globalTopVariants.Min);
+                                    globalTopVariants.Add(topVariant);
                                 }
                             }
                         }
                     }
                 );
 
-                var top100 = globalTop.Reverse().Take(100).ToList();
-                return top100.Select(x => x.Item2).ToList();
+                var topHundredVariants = globalTopVariants.Reverse().Take(100).ToList();
+                return topHundredVariants.Select(variantTuple => variantTuple.Item2).ToList();
             });
         }
-        
-        private static List<double> GeneratePossibleValues(double min, double max)
+        private static List<double> GeneratePossibleValues(double minValue, double maxValue)
         {
-            var values = new List<double>();
-            for (double v = min; v <= max; v += 1)
+            var possibleValues = new List<double>();
+            for (double currentValue = minValue; currentValue <= maxValue; currentValue += 1)
             {
-                values.Add(v);
+                possibleValues.Add(currentValue);
             }
-            //Console.WriteLine($"[DEBUG] Возможные значения для диапазона {min}-{max}: {string.Join(", ", values)}");
-            return values;
+            //Console.WriteLine($"[DEBUG] Возможные значения для диапазона {minValue}-{maxValue}: {string.Join(", ", possibleValues)}");
+            return possibleValues;
         }
-        
         public static List<Discipline>[] PrepareSemDisc(List<Discipline> disciplines)
         {
-            var semDisc = new List<Discipline>[8];
-            for (int sem = 1; sem <= 8; sem++)
-                semDisc[sem - 1] = disciplines.Where(d => d.Semester == sem).ToList();
-            return semDisc;
+            var semesterDisciplines = new List<Discipline>[8];
+            for (int semesterNumber = 1; semesterNumber <= 8; semesterNumber++)
+                semesterDisciplines[semesterNumber - 1] = disciplines.Where(discipline => discipline.Semester == semesterNumber).ToList();
+            return semesterDisciplines;
         }
-
-        public static double CalculateObjectiveFast(List<Discipline>[] semDisc, Dictionary<string, double> variant)
+        public static double CalculateObjectiveFast(List<Discipline>[] semesterDisciplines, Dictionary<string, double> workloadVariant)
         {
-            double product = 1.0;
-            for (int sem = 0; sem < 8; sem++)
+            double objectiveProduct = 1.0;
+            for (int semesterIndex = 0; semesterIndex < 8; semesterIndex++)
             {
-                double sum = 0;
-                foreach (var disc in semDisc[sem])
-                    sum += variant[disc.UniqueName] * disc.SignificanceCoefficient;
-                product *= sum;
+                double semesterSum = 0;
+                foreach (var discipline in semesterDisciplines[semesterIndex])
+                    semesterSum += workloadVariant[discipline.UniqueName] * discipline.SignificanceCoefficient;
+                objectiveProduct *= semesterSum;
             }
-            return product;
+            return objectiveProduct;
         }
           class BlockVariant
         {
             public Dictionary<string, double> Values = new Dictionary<string, double>();
             public double[] SumsBySemester = new double[2];
         }
-
         private async Task SaveResultsToExcelAsync(string filePath, List<Discipline> disciplines, Dictionary<string, double> bestVariant, List<(Dictionary<string, double> variant, double objective)> topVariants)
         {
             ExcelPackage.License.SetNonCommercialPersonal("<My Name>");
-            using (var package = new ExcelPackage())
+            using (var excelPackage = new ExcelPackage())
             {
-                var worksheet = package.Workbook.Worksheets.Add("Результаты");
-
-                worksheet.Cells[1, 1].Value = "Название дисциплины";
-                worksheet.Cells[1, 2].Value = "Семестр";
-                worksheet.Cells[1, 3].Value = "Трудоемкость (лучший вариант)";
-
-                for (int i = 0; i < Math.Min(topVariants.Count, 10000); i++)
+                var resultsWorksheet = excelPackage.Workbook.Worksheets.Add("Результаты");
+                var sortedDisciplines = disciplines.OrderBy(discipline => discipline.Semester).ToList();
+                int currentRow = 1;
+                int variantsToSave = Math.Min(topVariants.Count, 50); 
+                currentRow = WriteVariantTable(resultsWorksheet, sortedDisciplines, bestVariant,
+                    "ЛУЧШИЙ ВАРИАНТ", currentRow, Color.Yellow);                currentRow += 2;
+                // Сохраняем остальные варианты (начиная со второго, так как первый уже сохранен как "ЛУЧШИЙ ВАРИАНТ")
+                for (int variantIndex = 1; variantIndex < variantsToSave; variantIndex++)
                 {
-                    worksheet.Cells[1, i + 4].Value = $"Вариант {i + 1}";
+                    var variant = topVariants[variantIndex];
+                    string variantTitle = $"ВАРИАНТ {variantIndex}";
+                    Color highlightColor = Color.LightGray;
+
+                    currentRow = WriteVariantTable(resultsWorksheet, sortedDisciplines, variant.variant,
+                        variantTitle, currentRow, highlightColor);
+
+                    currentRow += 2;
                 }
 
-                using (var range = worksheet.Cells[1, 1, 1, Math.Min(topVariants.Count, 10000) + 3])
-                {
-                    range.Style.Font.Bold = true;
-                    range.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                    range.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
-                }
-
-                var sortedDisciplines = disciplines.OrderBy(d => d.Semester).ToList();
-
-                int row = 2;
-                foreach (var discipline in sortedDisciplines)
-                {
-                    worksheet.Cells[row, 1].Value = discipline.Name;
-                    worksheet.Cells[row, 2].Value = discipline.Semester;
-
-                    var bestWorkload = bestVariant[discipline.UniqueName];
-                    worksheet.Cells[row, 3].Value = bestWorkload;
-                    worksheet.Cells[row, 3].Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                    worksheet.Cells[row, 3].Style.Fill.BackgroundColor.SetColor(Color.Yellow);
-
-                    for (int i = 0; i < Math.Min(topVariants.Count, 10000); i++)
-                    {
-                        var variant = topVariants[i].variant;
-                        var workload = variant[discipline.UniqueName];
-                        worksheet.Cells[row, i + 4].Value = workload;
-                    }
-                    row++;
-                }
-                worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
-
-                await package.SaveAsAsync(new FileInfo(filePath));
+                resultsWorksheet.Cells[resultsWorksheet.Dimension.Address].AutoFitColumns();
+                await excelPackage.SaveAsAsync(new FileInfo(filePath));
             }
-        }        private List<Discipline>? currentDisciplines;
-        private List<(Dictionary<string, double> variant, double objective)>? currentTopVariants;
-        private Dictionary<string, double>? currentBestVariant;
+        }
 
-        private async void button1_Click(object sender, EventArgs e)
+        private int WriteVariantTable(ExcelWorksheet worksheet, List<Discipline> sortedDisciplines, 
+            Dictionary<string, double> variant, string title, int startRow, Color highlightColor)
+        {
+            int currentRow = startRow;
+
+            // Заголовок варианта
+            worksheet.Cells[currentRow, 1].Value = title;
+            worksheet.Cells[currentRow, 1, currentRow, 3].Merge = true;
+            using (var titleRange = worksheet.Cells[currentRow, 1, currentRow, 3])
+            {
+                titleRange.Style.Font.Bold = true;
+                titleRange.Style.Font.Size = 12;
+                titleRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                titleRange.Style.Fill.BackgroundColor.SetColor(highlightColor);
+                titleRange.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
+            }
+            currentRow++;
+
+            // Заголовки столбцов
+            worksheet.Cells[currentRow, 1].Value = "Название дисциплины";
+            worksheet.Cells[currentRow, 2].Value = "Семестр";
+            worksheet.Cells[currentRow, 3].Value = "Трудоемкость";
+            
+            using (var headerRange = worksheet.Cells[currentRow, 1, currentRow, 3])
+            {
+                headerRange.Style.Font.Bold = true;
+                headerRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                headerRange.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
+            }
+            currentRow++;            // Данные по дисциплинам
+            foreach (var discipline in sortedDisciplines)
+            {
+                worksheet.Cells[currentRow, 1].Value = discipline.Name;
+                worksheet.Cells[currentRow, 2].Value = discipline.Semester;
+                worksheet.Cells[currentRow, 3].Value = variant[discipline.UniqueName];
+                currentRow++;
+            }
+
+            return currentRow;
+        }private List<Discipline>? currentDisciplines;
+        private List<(Dictionary<string, double> variant, double objective)>? currentTopVariants;
+        private Dictionary<string, double>? currentBestVariant;        private async void button1_Click(object sender, EventArgs e)
         {
             try
             {
+                statusLabel.Text = "Выбор файла...";
                 using (OpenFileDialog openFileDialog = new OpenFileDialog())
                 {
                     openFileDialog.Filter = "Excel файлы (*.xlsx)|*.xlsx|Все файлы (*.*)|*.*";
@@ -499,127 +540,159 @@ namespace Optimizations
 
                     if (openFileDialog.ShowDialog() == DialogResult.OK)
                     {
-                        try
+                        // Показываем прогресс-бар и обновляем статус
+                        progressBar.Visible = true;
+                        progressBar.Style = ProgressBarStyle.Marquee;
+                        statusLabel.Text = "Загрузка данных из Excel файла...";
+                        button1.Enabled = false;
+                        button3.Enabled = false;                        try
                         {
                             currentDisciplines = await ReadExcelDataAsync(openFileDialog.FileName);
                         }
                         catch (InvalidOperationException ex) when (ex.Message == "MultipleSheets")
                         {
-                            using (var package = new ExcelPackage(new FileInfo(openFileDialog.FileName)))
+                            statusLabel.Text = "Выбор листа Excel...";
+                            using (var excelPackage = new ExcelPackage(new FileInfo(openFileDialog.FileName)))
                             {
-                                var sheetNames = package.Workbook.Worksheets.Select(ws => ws.Name).ToArray();
-                                using (var form = new Form())
+                                var worksheetNames = excelPackage.Workbook.Worksheets.Select(worksheet => worksheet.Name).ToArray();
+                                using (var sheetSelectionForm = new Form())
                                 {
-                                    form.Text = "Выберите лист";
-                                    form.Width = 300;
-                                    form.Height = 150;
-                                    form.FormBorderStyle = FormBorderStyle.FixedDialog;
-                                    form.StartPosition = FormStartPosition.CenterParent;
-                                    form.MaximizeBox = false;
-                                    form.MinimizeBox = false;
+                                    sheetSelectionForm.Text = "Выберите лист";
+                                    sheetSelectionForm.Width = 300;
+                                    sheetSelectionForm.Height = 150;
+                                    sheetSelectionForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                                    sheetSelectionForm.StartPosition = FormStartPosition.CenterParent;
+                                    sheetSelectionForm.MaximizeBox = false;
+                                    sheetSelectionForm.MinimizeBox = false;
+                                    sheetSelectionForm.BackColor = Color.White;
+                                    sheetSelectionForm.Font = new Font("Segoe UI", 9F);
 
-                                    var label = new Label
+                                    var instructionLabel = new Label
                                     {
                                         Text = "Выберите лист для загрузки:",
                                         Location = new Point(10, 10),
-                                        AutoSize = true
+                                        AutoSize = true,
+                                        Font = new Font("Segoe UI", 10F)
                                     };
 
-                                    var comboBox = new ComboBox
+                                    var sheetComboBox = new ComboBox
                                     {
                                         Location = new Point(10, 40),
                                         Width = 260,
-                                        DropDownStyle = ComboBoxStyle.DropDownList
+                                        DropDownStyle = ComboBoxStyle.DropDownList,
+                                        Font = new Font("Segoe UI", 10F)
                                     };
-                                    comboBox.Items.AddRange(sheetNames);
-                                    comboBox.SelectedIndex = 0;
+                                    sheetComboBox.Items.AddRange(worksheetNames);
+                                    sheetComboBox.SelectedIndex = 0;
 
-                                    var button = new Button
+                                    var okButton = new Button
                                     {
                                         Text = "OK",
                                         DialogResult = DialogResult.OK,
-                                        Location = new Point(100, 70)
+                                        Location = new Point(100, 70),
+                                        BackColor = Color.FromArgb(0, 123, 255),
+                                        ForeColor = Color.White,
+                                        FlatStyle = FlatStyle.Flat,
+                                        Font = new Font("Segoe UI", 10F)
                                     };
+                                    okButton.FlatAppearance.BorderSize = 0;                                    sheetSelectionForm.Controls.AddRange(new Control[] { instructionLabel, sheetComboBox, okButton });
+                                    sheetSelectionForm.AcceptButton = okButton;
 
-                                    form.Controls.AddRange(new Control[] { label, comboBox, button });
-                                    form.AcceptButton = button;                                    if (form.ShowDialog() == DialogResult.OK)
+                                    if (sheetSelectionForm.ShowDialog() == DialogResult.OK)
                                     {
-                                        var selectedItem = comboBox.SelectedItem?.ToString();
-                                        if (selectedItem != null)
+                                        var selectedSheetName = sheetComboBox.SelectedItem?.ToString();
+                                        if (selectedSheetName != null)
                                         {
-                                            currentDisciplines = await ReadExcelDataAsync(openFileDialog.FileName, selectedItem);
+                                            statusLabel.Text = $"Загрузка данных из листа '{selectedSheetName}'...";
+                                            currentDisciplines = await ReadExcelDataAsync(openFileDialog.FileName, selectedSheetName);
                                         }
                                     }
                                     else
                                     {
+                                        progressBar.Visible = false;
+                                        statusLabel.Text = "Готов к работе";
+                                        button1.Enabled = true;
                                         return;
                                     }
                                 }
-                            }                        }
+                            }
+                        }
 
                         if (currentDisciplines == null)
                         {
                             MessageBox.Show("Не удалось загрузить данные из файла.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            progressBar.Visible = false;
+                            statusLabel.Text = "Ошибка загрузки данных";
+                            button1.Enabled = true;
                             return;
                         }
 
-                        var semDisc = PrepareSemDisc(currentDisciplines);
-                        var validVariants = await GenerateValidVariantsAsync(currentDisciplines);
-
+                        statusLabel.Text = "Генерация вариантов оптимизации...";
+                        var semesterDisciplinesArray = PrepareSemDisc(currentDisciplines);
+                        var validVariants = await GenerateValidVariantsAsync(currentDisciplines);                        statusLabel.Text = "Расчет целевой функции...";
                         var scoredVariants = new ConcurrentBag<(Dictionary<string, double> variant, double objective)>();
-                        Parallel.ForEach(validVariants, variant =>
+                        Parallel.ForEach(validVariants, workloadVariant =>
                         {
-                            double obj = CalculateObjectiveFast(semDisc, variant);
-                            scoredVariants.Add((variant, obj));
+                            double objectiveValue = CalculateObjectiveFast(semesterDisciplinesArray, workloadVariant);
+                            scoredVariants.Add((workloadVariant, objectiveValue));
                         });
 
+                        statusLabel.Text = "Сортировка результатов...";
                         currentTopVariants = scoredVariants
-                            .OrderByDescending(x => x.objective)
+                            .OrderByDescending(variantTuple => variantTuple.objective)
                             .Take(10000)
                             .ToList();
 
                         if (currentTopVariants.Count > 0)
                         {
-                            var best = currentTopVariants.First();
-                            currentBestVariant = best.Item1;
-                            Console.WriteLine("\nЛучший допустимый вариант:");
-                            Console.WriteLine(string.Join(", ", best.Item1.Select(kv => $"{kv.Key}:{kv.Value}")));
-                            label1.Text = $"Целевая функция: {best.Item2:F2}";
-
+                            var bestVariantTuple = currentTopVariants.First();
+                            currentBestVariant = bestVariantTuple.Item1;                            Console.WriteLine("\nЛучший допустимый вариант:");
+                            Console.WriteLine(string.Join(", ", bestVariantTuple.Item1.Select(keyValue => $"{keyValue.Key}:{keyValue.Value}")));
+                            
+                            statusLabel.Text = "Заполнение таблицы результатов...";
                             dataGridView1.Rows.Clear();
 
-                            var sortedDisciplines = currentDisciplines.OrderBy(d => d.Semester).ToList();
+                            var sortedDisciplines = currentDisciplines.OrderBy(discipline => discipline.Semester).ToList();
   
                             foreach (var discipline in sortedDisciplines)
                             {
-                                var workload = best.Item1[discipline.UniqueName];
+                                var disciplineWorkload = bestVariantTuple.Item1[discipline.UniqueName];
                                 dataGridView1.Rows.Add(
                                     discipline.Name,
-                                    workload.ToString("F1"),
+                                    disciplineWorkload.ToString("F1"),
                                     discipline.SignificanceCoefficient.ToString("F2"),
                                     discipline.Semester
                                 );
                             }
+                            
+                            statusLabel.Text = $"Готово! Найдено {currentTopVariants.Count} вариантов оптимизации";
+                            button3.Enabled = true;
                         }
                         else
                         {
                             MessageBox.Show("Допустимых вариантов не найдено.", "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            statusLabel.Text = "Допустимых вариантов не найдено";
                         }
+                        
+                        // Скрываем прогресс-бар и активируем кнопки
+                        progressBar.Visible = false;
+                        button1.Enabled = true;
                     }
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Произошла ошибка: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                progressBar.Visible = false;
+                statusLabel.Text = "Ошибка выполнения операции";
+                button1.Enabled = true;
             }
         }
 
         private void button2_Click(object sender, EventArgs e)
         {
             this.Close();
-        }
-
-        private async void button3_Click_1(object sender, EventArgs e)
+        }        private async void button3_Click_1(object sender, EventArgs e)
         {
             try
             {
@@ -629,24 +702,86 @@ namespace Optimizations
                     return;
                 }
 
-                using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+                using (SaveFileDialog saveResultsDialog = new SaveFileDialog())
                 {
-                    saveFileDialog.Filter = "Excel файлы (*.xlsx)|*.xlsx";
-                    saveFileDialog.Title = "Сохранить результаты";
-                    saveFileDialog.DefaultExt = "xlsx";
-                    saveFileDialog.AddExtension = true;
+                    saveResultsDialog.Filter = "Excel файлы (*.xlsx)|*.xlsx";
+                    saveResultsDialog.Title = "Сохранить результаты";
+                    saveResultsDialog.DefaultExt = "xlsx";
+                    saveResultsDialog.AddExtension = true;
 
-                    if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                    if (saveResultsDialog.ShowDialog() == DialogResult.OK)
                     {
-                        await SaveResultsToExcelAsync(saveFileDialog.FileName, currentDisciplines, currentBestVariant, currentTopVariants);
-                        MessageBox.Show("Результаты успешно сохранены!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        // Показываем прогресс
+                        progressBar.Visible = true;
+                        progressBar.Style = ProgressBarStyle.Marquee;
+                        statusLabel.Text = "Сохранение результатов в Excel файл...";
+                        button3.Enabled = false;
+                        button1.Enabled = false;
+                          int variantsToSave = Math.Min(currentTopVariants.Count, 50);
+                        await SaveResultsToExcelAsync(saveResultsDialog.FileName, currentDisciplines, currentBestVariant, currentTopVariants);
+                        
+                        // Скрываем прогресс
+                        progressBar.Visible = false;
+                        statusLabel.Text = $"Результаты сохранены! Файл: {Path.GetFileName(saveResultsDialog.FileName)}";
+                        button3.Enabled = true;
+                        button1.Enabled = true;
+                        
+                        MessageBox.Show($"Результаты успешно сохранены!\nСохранено вариантов: {variantsToSave}\nФайл: {saveResultsDialog.FileName}", 
+                            "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                 }
             }
             catch (Exception ex)
             {
+                progressBar.Visible = false;
+                statusLabel.Text = "Ошибка сохранения файла";
+                button3.Enabled = true;
+                button1.Enabled = true;
                 MessageBox.Show($"Произошла ошибка при сохранении: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }private static void ShowParsingInfo(List<Discipline> disciplines, Dictionary<string, int> parsingStats)
+        {
+            var semesterGroups = disciplines.GroupBy(d => d.Semester).OrderBy(g => g.Key);
+            var fixedDisciplines = disciplines.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) < 0.001).Count();
+            var variableDisciplines = disciplines.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) > 0.001).Count();
+            
+            var infoText = new StringBuilder();
+            infoText.AppendLine("ИНФОРМАЦИЯ О ЗАГРУЖЕННЫХ ДАННЫХ:");
+            infoText.AppendLine();
+            
+            // Статистика парсинга
+            infoText.AppendLine("СТАТИСТИКА ПАРСИНГА:");
+            foreach (var stat in parsingStats)
+            {
+                infoText.AppendLine($"{stat.Key}: {stat.Value}");
+            }
+            infoText.AppendLine();
+            
+            infoText.AppendLine($"Всего дисциплин: {disciplines.Count}");
+            infoText.AppendLine($"Фиксированных дисциплин: {fixedDisciplines}");
+            infoText.AppendLine($"Переменных дисциплин: {variableDisciplines}");
+            infoText.AppendLine();
+            
+            infoText.AppendLine("РАСПРЕДЕЛЕНИЕ ПО СЕМЕСТРАМ:");
+            foreach (var group in semesterGroups)
+            {
+                var semesterFixed = group.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) < 0.001).Count();
+                var semesterVariable = group.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) > 0.001).Count();
+                infoText.AppendLine($"Семестр {group.Key}: {group.Count()} дисциплин (фикс: {semesterFixed}, вар: {semesterVariable})");
+            }
+            infoText.AppendLine();
+            
+            infoText.AppendLine("ДИАПАЗОНЫ ТРУДОЕМКОСТИ:");
+            var minWorkload = disciplines.Min(d => d.MinWorkload);
+            var maxWorkload = disciplines.Max(d => d.MaxWorkload);
+            var avgSignificance = disciplines.Average(d => d.SignificanceCoefficient);
+            
+            infoText.AppendLine($"Минимальная трудоемкость: {minWorkload:F1}");
+            infoText.AppendLine($"Максимальная трудоемкость: {maxWorkload:F1}");
+            infoText.AppendLine($"Средний коэффициент значимости: {avgSignificance:F3}");
+            
+            MessageBox.Show(infoText.ToString(), "Информация о загруженных данных", 
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 }
