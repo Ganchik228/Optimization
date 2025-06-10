@@ -31,228 +31,156 @@ partial class Form1
         button1 = new Button();
         button2 = new Button();
         button3 = new Button();
-        dataGridView1 = new DataGridView();
-        columnName = new DataGridViewTextBoxColumn();
-        columnWorkload = new DataGridViewTextBoxColumn();
-        columnSignificance = new DataGridViewTextBoxColumn();
-        columnSemester = new DataGridViewTextBoxColumn();
-        titleLabel = new Label();
-        statusPanel = new Panel();
         progressBar = new ProgressBar();
         statusLabel = new Label();
+        titleLabel = new Label();
+        headerPanel = new Panel();
         mainPanel = new Panel();
-        buttonPanel = new Panel();
-        ((System.ComponentModel.ISupportInitialize)dataGridView1).BeginInit();
-        statusPanel.SuspendLayout();
-        mainPanel.SuspendLayout();
-        buttonPanel.SuspendLayout();
+        footerPanel = new Panel();
+        infoLabel = new Label();
         SuspendLayout();
+          // 
+        // headerPanel
         // 
+        headerPanel.BackColor = Color.FromArgb(45, 125, 255);
+        headerPanel.Dock = DockStyle.Top;
+        headerPanel.Height = 100;
+        headerPanel.Controls.Add(titleLabel);
+        headerPanel.Controls.Add(infoLabel);
+          // 
         // titleLabel
         // 
-        titleLabel.BackColor = Color.FromArgb(45, 66, 91);
-        titleLabel.Dock = DockStyle.Top;
         titleLabel.Font = new Font("Segoe UI", 18F, FontStyle.Bold);
         titleLabel.ForeColor = Color.White;
-        titleLabel.Location = new Point(0, 0);
-        titleLabel.Name = "titleLabel";
-        titleLabel.Size = new Size(1024, 60);
-        titleLabel.TabIndex = 0;
-        titleLabel.Text = "Система оптимизации учебного плана";
-        titleLabel.TextAlign = ContentAlignment.MiddleCenter;
+        titleLabel.Location = new Point(30, 20);
+        titleLabel.Size = new Size(520, 35);
+        titleLabel.Text = "🎓 Система оптимизации учебного плана";
+        titleLabel.TextAlign = ContentAlignment.MiddleLeft;
+          // 
+        // infoLabel
         // 
-        // buttonPanel
+        infoLabel.Font = new Font("Segoe UI", 10F);
+        infoLabel.ForeColor = Color.FromArgb(220, 220, 220);
+        infoLabel.Location = new Point(30, 55);
+        infoLabel.Size = new Size(500, 20);
+        infoLabel.Text = "Загрузите Excel файл для оптимизации расписания";
+        infoLabel.TextAlign = ContentAlignment.MiddleLeft;
+        
         // 
-        buttonPanel.BackColor = Color.FromArgb(248, 249, 250);
-        buttonPanel.Controls.Add(button1);
-        buttonPanel.Controls.Add(button3);
-        buttonPanel.Controls.Add(button2);
-        buttonPanel.Dock = DockStyle.Top;
-        buttonPanel.Location = new Point(0, 60);
-        buttonPanel.Name = "buttonPanel";
-        buttonPanel.Padding = new Padding(20, 15, 20, 15);
-        buttonPanel.Size = new Size(1024, 70);
-        buttonPanel.TabIndex = 1;
+        // mainPanel
         // 
-        // button1
+        mainPanel.BackColor = Color.FromArgb(248, 249, 250);
+        mainPanel.Dock = DockStyle.Fill;
+        mainPanel.Padding = new Padding(30);
+        mainPanel.Controls.Add(button1);
+        mainPanel.Controls.Add(button3);
+        mainPanel.Controls.Add(button2);
+        
         // 
-        button1.BackColor = Color.FromArgb(40, 167, 69);
+        // footerPanel
+        // 
+        footerPanel.BackColor = Color.FromArgb(255, 255, 255);
+        footerPanel.Dock = DockStyle.Bottom;
+        footerPanel.Height = 70;
+        footerPanel.Controls.Add(progressBar);
+        footerPanel.Controls.Add(statusLabel);
+          // 
+        // button1 (Загрузить)
+        // 
+        button1.BackColor = Color.FromArgb(52, 199, 89);
         button1.FlatAppearance.BorderSize = 0;
-        button1.FlatAppearance.MouseDownBackColor = Color.FromArgb(33, 136, 56);
-        button1.FlatAppearance.MouseOverBackColor = Color.FromArgb(52, 183, 85);
+        button1.FlatAppearance.MouseDownBackColor = Color.FromArgb(36, 160, 67);
+        button1.FlatAppearance.MouseOverBackColor = Color.FromArgb(76, 217, 100);
         button1.FlatStyle = FlatStyle.Flat;
-        button1.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+        button1.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
         button1.ForeColor = Color.White;
-        button1.Location = new Point(20, 15);
+        button1.Location = new Point(40, 40);
         button1.Name = "button1";
-        button1.Size = new Size(160, 40);
+        button1.Size = new Size(200, 60);
         button1.TabIndex = 0;
-        button1.Text = "📁 Загрузить данные";
+        button1.Text = "📁 Загрузить файл";
         button1.UseVisualStyleBackColor = false;
+        button1.Cursor = Cursors.Hand;
         button1.Click += button1_Click;
+          // 
+        // button3 (Сохранить)
         // 
-        // button3
-        // 
-        button3.BackColor = Color.FromArgb(0, 123, 255);
+        button3.BackColor = Color.FromArgb(0, 122, 255);
         button3.FlatAppearance.BorderSize = 0;
         button3.FlatAppearance.MouseDownBackColor = Color.FromArgb(0, 86, 179);
         button3.FlatAppearance.MouseOverBackColor = Color.FromArgb(38, 143, 255);
         button3.FlatStyle = FlatStyle.Flat;
-        button3.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+        button3.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
         button3.ForeColor = Color.White;
-        button3.Location = new Point(200, 15);
+        button3.Location = new Point(260, 40);
         button3.Name = "button3";
-        button3.Size = new Size(180, 40);
+        button3.Size = new Size(180, 60);
         button3.TabIndex = 2;
-        button3.Text = "💾 Сохранить результаты";
+        button3.Text = "💾 Сохранить";
         button3.UseVisualStyleBackColor = false;
+        button3.Cursor = Cursors.Hand;
         button3.Click += button3_Click_1;
+          // 
+        // button2 (Закрыть)
         // 
-        // button2
-        // 
-        button2.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        button2.BackColor = Color.FromArgb(220, 53, 69);
+        button2.BackColor = Color.FromArgb(255, 59, 48);
         button2.FlatAppearance.BorderSize = 0;
         button2.FlatAppearance.MouseDownBackColor = Color.FromArgb(200, 35, 51);
-        button2.FlatAppearance.MouseOverBackColor = Color.FromArgb(229, 83, 98);
+        button2.FlatAppearance.MouseOverBackColor = Color.FromArgb(255, 105, 97);
         button2.FlatStyle = FlatStyle.Flat;
-        button2.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+        button2.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
         button2.ForeColor = Color.White;
-        button2.Location = new Point(844, 15);
+        button2.Location = new Point(460, 40);
         button2.Name = "button2";
-        button2.Size = new Size(160, 40);
+        button2.Size = new Size(140, 60);
         button2.TabIndex = 1;
         button2.Text = "❌ Закрыть";
-        button2.UseVisualStyleBackColor = false;        button2.Click += button2_Click;
-        // 
-        // mainPanel
-        // 
-        mainPanel.BackColor = Color.White;
-        mainPanel.Controls.Add(dataGridView1);
-        mainPanel.Dock = DockStyle.Fill;
-        mainPanel.Location = new Point(0, 130);
-        mainPanel.Name = "mainPanel";
-        mainPanel.Padding = new Padding(20);
-        mainPanel.Size = new Size(1024, 490);
-        mainPanel.TabIndex = 2;
-        // 
-        // dataGridView1
-        // 
-        dataGridView1.AllowUserToAddRows = false;
-        dataGridView1.AllowUserToDeleteRows = false;
-        dataGridView1.AllowUserToResizeRows = false;
-        dataGridView1.BackgroundColor = Color.White;
-        dataGridView1.BorderStyle = BorderStyle.None;
-        dataGridView1.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-        dataGridView1.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-        dataGridView1.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleLeft;
-        dataGridView1.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(52, 58, 64);
-        dataGridView1.ColumnHeadersDefaultCellStyle.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
-        dataGridView1.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-        dataGridView1.ColumnHeadersDefaultCellStyle.Padding = new Padding(10, 0, 10, 0);
-        dataGridView1.ColumnHeadersDefaultCellStyle.SelectionBackColor = Color.FromArgb(52, 58, 64);
-        dataGridView1.ColumnHeadersDefaultCellStyle.SelectionForeColor = Color.White;
-        dataGridView1.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.False;
-        dataGridView1.ColumnHeadersHeight = 45;
-        dataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        dataGridView1.Columns.AddRange(new DataGridViewColumn[] { columnName, columnWorkload, columnSignificance, columnSemester });
-        dataGridView1.DefaultCellStyle.BackColor = Color.White;
-        dataGridView1.DefaultCellStyle.Font = new Font("Segoe UI", 10F);
-        dataGridView1.DefaultCellStyle.ForeColor = Color.FromArgb(73, 80, 87);
-        dataGridView1.DefaultCellStyle.Padding = new Padding(10, 5, 10, 5);        dataGridView1.DefaultCellStyle.SelectionBackColor = Color.FromArgb(0, 123, 255, 25);
-        dataGridView1.DefaultCellStyle.SelectionForeColor = Color.FromArgb(73, 80, 87);
-        dataGridView1.EnableHeadersVisualStyles = false;
-        dataGridView1.GridColor = Color.FromArgb(222, 226, 230);
-        dataGridView1.Location = new Point(20, 20);
-        dataGridView1.MultiSelect = false;
-        dataGridView1.Name = "dataGridView1";
-        dataGridView1.ReadOnly = true;
-        dataGridView1.RowHeadersVisible = false;
-        dataGridView1.RowTemplate.Height = 35;
-        dataGridView1.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        dataGridView1.Size = new Size(984, 420);
-        dataGridView1.TabIndex = 4;
-        // 
-        // columnName
-        // 
-        columnName.HeaderText = "Название дисциплины";
-        columnName.Name = "columnName";
-        columnName.ReadOnly = true;
-        columnName.Width = 400;
-        // 
-        // columnWorkload
-        // 
-        columnWorkload.HeaderText = "Трудоемкость";
-        columnWorkload.Name = "columnWorkload";
-        columnWorkload.ReadOnly = true;
-        columnWorkload.Width = 150;
-        // 
-        // columnSignificance
-        // 
-        columnSignificance.HeaderText = "Коэффициент значимости";
-        columnSignificance.Name = "columnSignificance";
-        columnSignificance.ReadOnly = true;
-        columnSignificance.Width = 200;
-        // 
-        // columnSemester
-        // 
-        columnSemester.HeaderText = "Семестр";
-        columnSemester.Name = "columnSemester";
-        columnSemester.ReadOnly = true;
-        columnSemester.Width = 100;
-        // 
-        // statusPanel
-        // 
-        statusPanel.BackColor = Color.FromArgb(248, 249, 250);
-        statusPanel.Controls.Add(progressBar);
-        statusPanel.Controls.Add(statusLabel);
-        statusPanel.Dock = DockStyle.Bottom;
-        statusPanel.Location = new Point(0, 620);
-        statusPanel.Name = "statusPanel";
-        statusPanel.Padding = new Padding(20, 10, 20, 10);
-        statusPanel.Size = new Size(1024, 44);
-        statusPanel.TabIndex = 3;
-        // 
-        // statusLabel
-        // 
-        statusLabel.AutoSize = true;
-        statusLabel.Font = new Font("Segoe UI", 9F);
-        statusLabel.ForeColor = Color.FromArgb(108, 117, 125);
-        statusLabel.Location = new Point(20, 15);
-        statusLabel.Name = "statusLabel";
-        statusLabel.Size = new Size(122, 15);
-        statusLabel.TabIndex = 0;
-        statusLabel.Text = "Готов к работе";
+        button2.UseVisualStyleBackColor = false;
+        button2.Cursor = Cursors.Hand;
+        button2.Click += button2_Click;
+        
         // 
         // progressBar
         // 
-        progressBar.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        progressBar.Location = new Point(844, 12);
-        progressBar.Name = "progressBar";
-        progressBar.Size = new Size(160, 20);
+        progressBar.Location = new Point(30, 15);
+        progressBar.Size = new Size(520, 20);
         progressBar.Style = ProgressBarStyle.Continuous;
         progressBar.TabIndex = 1;
+        progressBar.ForeColor = Color.FromArgb(0, 122, 255);
+        progressBar.BackColor = Color.FromArgb(240, 240, 240);
         progressBar.Visible = false;
+        
         // 
+        // statusLabel
+        // 
+        statusLabel.Font = new Font("Segoe UI", 10F, FontStyle.Bold);
+        statusLabel.ForeColor = Color.FromArgb(100, 100, 100);
+        statusLabel.Location = new Point(30, 40);
+        statusLabel.Size = new Size(520, 20);
+        statusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        statusLabel.Text = "✅ Готов к работе";
+          // 
         // Form1
         // 
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        BackColor = Color.White;
-        ClientSize = new Size(1024, 664);
+        BackColor = Color.FromArgb(245, 247, 250);
+        ClientSize = new Size(640, 280);
         Controls.Add(mainPanel);
-        Controls.Add(statusPanel);
-        Controls.Add(buttonPanel);
-        Controls.Add(titleLabel);
+        Controls.Add(headerPanel);
+        Controls.Add(footerPanel);
         Font = new Font("Segoe UI", 9F);
-        MinimumSize = new Size(800, 600);
+        FormBorderStyle = FormBorderStyle.FixedSingle;
+        MaximizeBox = false;
+        MinimumSize = new Size(640, 280);
         Name = "Form1";
         StartPosition = FormStartPosition.CenterScreen;
-        Text = "Система оптимизации учебного плана";        ((System.ComponentModel.ISupportInitialize)dataGridView1).EndInit();
-        statusPanel.ResumeLayout(false);
-        statusPanel.PerformLayout();
+        Text = "🎓 Система оптимизации учебного плана";
+        Icon = null;
+        
+        headerPanel.ResumeLayout(false);
         mainPanel.ResumeLayout(false);
-        buttonPanel.ResumeLayout(false);
+        footerPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
 
@@ -261,15 +189,11 @@ partial class Form1
     private Button button1;
     private Button button2;
     private Button button3;
-    private DataGridView dataGridView1;
-    private DataGridViewTextBoxColumn columnName;
-    private DataGridViewTextBoxColumn columnWorkload;
-    private DataGridViewTextBoxColumn columnSignificance;
-    private DataGridViewTextBoxColumn columnSemester;
-    private Label titleLabel;
-    private Panel statusPanel;
     private ProgressBar progressBar;
     private Label statusLabel;
+    private Label titleLabel;
+    private Panel headerPanel;
     private Panel mainPanel;
-    private Panel buttonPanel;
+    private Panel footerPanel;
+    private Label infoLabel;
 }

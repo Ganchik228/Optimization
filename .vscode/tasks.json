@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Delete Form1_new.cs to resolve duplicate class errors",
+			"command": "del \"c:\\Users\\tasdm\\Documents\\Repoes\\UCHEBA\\Optimizations\\Form1_new.cs\""
+		}
+	]
+}
