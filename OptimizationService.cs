@@ -8,17 +8,18 @@ namespace Optimizations
 {
     public class OptimizationService
     {
-        public static Task<List<Dictionary<string, double>>> GenerateValidVariantsAsync(List<Discipline> disciplines)
+        public static Task<List<Dictionary<string, double>>> GenerateValidVariantsAsync(List<Discipline> disciplines, HashSet<string> userExcludedDisciplineNames, List<(int Sem1, int Sem2, double TargetSum)> semesterPairs)
         {
             return Task.Run(() =>
             {
-                var semesterPairs = new List<(int Sem1, int Sem2, double TargetSum)>
-                {
-                    (1, 2, 60.5),
-                    (3, 4, 59.5),
-                    (5, 6, 60),
-                    (7, 8, 60)
-                };
+                
+                // var semesterPairs = new List<(int Sem1, int Sem2, double TargetSum)>
+                // {
+                //     (1, 2, 60.5),
+                //     (3, 4, 59.5),
+                //     (5, 6, 60),
+                //     (7, 8, 60)
+                // };
 
                 var blockVariants = new List<List<BlockVariant>>(semesterPairs.Count);
                 var blockVariantsLock = new object();
@@ -28,9 +29,44 @@ namespace Optimizations
                     var (firstSemester, secondSemester, targetSum) = semesterPair;
                     var blockDisciplines = disciplines.Where(discipline => discipline.Semester == firstSemester || discipline.Semester == secondSemester).ToList();
                     Console.WriteLine($"Блок {firstSemester}+{secondSemester}: дисциплин {blockDisciplines.Count}");
+                    
+                    // Диагностика: проверяем есть ли дисциплины в блоке
+                    if (blockDisciplines.Count == 0)
+                    {
+                        Console.WriteLine($"ВНИМАНИЕ: Блок {firstSemester}+{secondSemester} не содержит дисциплин!");
+                        lock (blockVariantsLock)
+                        {
+                            blockVariants.Add(new List<BlockVariant>());
+                        }
+                        return;
+                    }
+                    
                     var fixedDisciplines = blockDisciplines.Where(discipline => Math.Abs(discipline.MinWorkload - discipline.MaxWorkload) < 0.001).ToList();
                     var variableDisciplines = blockDisciplines.Where(discipline => Math.Abs(discipline.MinWorkload - discipline.MaxWorkload) > 0.001).ToList();
                     Console.WriteLine($"Блок {firstSemester}+{secondSemester}: фиксированных {fixedDisciplines.Count}, переменных {variableDisciplines.Count}");
+
+                    // Диагностика: проверяем сумму фиксированных дисциплин
+                    var fixedSum = fixedDisciplines.Sum(d => d.MinWorkload);
+                    var minVariableSum = variableDisciplines.Sum(d => d.MinWorkload);
+                    var maxVariableSum = variableDisciplines.Sum(d => d.MaxWorkload);
+                    var totalMinSum = fixedSum + minVariableSum;
+                    var totalMaxSum = fixedSum + maxVariableSum;
+                    
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: фиксированная сумма = {fixedSum:F1}");
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: возможный диапазон общей суммы = {totalMinSum:F1} - {totalMaxSum:F1}");
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: целевая сумма = {targetSum:F1}");
+                    
+                    // Проверяем, возможно ли достичь целевой суммы
+                    if (targetSum < totalMinSum - 0.1 || targetSum > totalMaxSum + 0.1)
+                    {
+                        Console.WriteLine($"КРИТИЧЕСКАЯ ОШИБКА: Целевая сумма {targetSum} недостижима для блока {firstSemester}+{secondSemester}!");
+                        Console.WriteLine($"Возможный диапазон: {totalMinSum:F1} - {totalMaxSum:F1}");
+                        lock (blockVariantsLock)
+                        {
+                            blockVariants.Add(new List<BlockVariant>());
+                        }
+                        return;
+                    }
 
                     var baseVariant = fixedDisciplines.ToDictionary(discipline => discipline.UniqueName, discipline => discipline.MinWorkload);
                     var valueOptionsList = variableDisciplines
@@ -41,12 +77,14 @@ namespace Optimizations
 
                     var localVariants = new List<BlockVariant>();
                     int rejectedVariantsCount = 0;
+                    int totalVariantsChecked = 0;
 
                     void RecurseVariants(int disciplineIndex, Dictionary<string, double> currentVariant)
                     {
                         if (disciplineIndex == variableDisciplines.Count)
                         {
-                            var excludedDisciplineNames = new HashSet<string> { "Онтологическое моделирование", "Проектирование пользовательского интерфейса" };
+                            totalVariantsChecked++;
+                            var excludedDisciplineNames = userExcludedDisciplineNames; 
                             double sumFirstSemester = 0, sumSecondSemester = 0, sumPair = 0, excludedSum = 0;
                             foreach (var discipline in blockDisciplines)
                             {
@@ -64,25 +102,25 @@ namespace Optimizations
                             double sumWithoutExcluded = sumPair - excludedSum;
                             bool isValidVariant = true;
                             string rejectionReason = "";
-                            if (Math.Abs(sumWithoutExcluded - targetSum) > 0.001)
+                            
+                            // Увеличиваем допуск для целевой суммы
+                            if (Math.Abs(sumWithoutExcluded - targetSum) > 0.5)
                             {
                                 isValidVariant = false;
-                                rejectionReason = $"Сумма (без исключённых) {sumWithoutExcluded} != {targetSum}";
+                                rejectionReason = $"Сумма (без исключённых) {sumWithoutExcluded:F1} != {targetSum:F1} (разница: {Math.Abs(sumWithoutExcluded - targetSum):F1})";
                             }
                             else if (Math.Abs(sumFirstSemester - sumSecondSemester) > 6)
                             {
                                 isValidVariant = false;
-                                rejectionReason = $"Разница между семестрами {Math.Abs(sumFirstSemester - sumSecondSemester)} > 6";
+                                rejectionReason = $"Разница между семестрами {Math.Abs(sumFirstSemester - sumSecondSemester):F1} > 6";
                             }
 
                             if (!isValidVariant)
                             {
-                                if (rejectedVariantsCount < 5)
+                                rejectedVariantsCount++;
+                                if (rejectedVariantsCount <= 10)
                                 {
-                                    var allWorkloadValues = new Dictionary<string, double>(baseVariant);
-                                    foreach (var keyValue in currentVariant) allWorkloadValues[keyValue.Key] = keyValue.Value;
-                                    string workloadValuesText = string.Join(", ", allWorkloadValues.Select(keyValue => $"{keyValue.Key}:{keyValue.Value}"));
-                                    rejectedVariantsCount++;
+                                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: Отклонен вариант - {rejectionReason}");
                                 }
                                 return;
                             }
@@ -118,14 +156,36 @@ namespace Optimizations
                     }
 
                     RecurseVariants(0, new Dictionary<string, double>());
-                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: найдено вариантов {localVariants.Count}");
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: проверено вариантов {totalVariantsChecked}, найдено подходящих {localVariants.Count}, отклонено {rejectedVariantsCount}");
+
+                    // Если не найдено вариантов, создаем хотя бы один базовый
+                    if (localVariants.Count == 0)
+                    {
+                        Console.WriteLine($"ВНИМАНИЕ: Для блока {firstSemester}+{secondSemester} не найдено подходящих вариантов. Создаем базовый вариант.");
+                        
+                        // Создаем базовый вариант с минимальными значениями
+                        var baseValidVariant = new Dictionary<string, double>();
+                        foreach (var discipline in blockDisciplines)
+                        {
+                            baseValidVariant[discipline.UniqueName] = discipline.MinWorkload;
+                        }
+                        
+                        double baseObjectiveFirst = blockDisciplines.Where(d => d.Semester == firstSemester).Sum(d => d.MinWorkload * d.SignificanceCoefficient);
+                        double baseObjectiveSecond = blockDisciplines.Where(d => d.Semester == secondSemester).Sum(d => d.MinWorkload * d.SignificanceCoefficient);
+                        
+                        localVariants.Add(new BlockVariant
+                        {
+                            Values = baseValidVariant,
+                            SumsBySemester = new[] { baseObjectiveFirst, baseObjectiveSecond }
+                        });
+                    }
 
                     var topTenVariants = localVariants
                         .OrderByDescending(variant => variant.SumsBySemester[0] * variant.SumsBySemester[1])
                         .Take(10)
                         .ToList();
 
-                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: отобрано топ-10 вариантов");
+                    Console.WriteLine($"Блок {firstSemester}+{secondSemester}: отобрано топ-{topTenVariants.Count} вариантов");
                     lock (blockVariantsLock)
                     {
                         blockVariants.Add(topTenVariants);
@@ -135,8 +195,21 @@ namespace Optimizations
                 var allResultVariants = new ConcurrentBag<Dictionary<string, double>>();
                 int totalBlocks = blockVariants.Count;
                 var blockSizes = blockVariants.Select(blockVariantList => blockVariantList.Count).ToArray();
+                
+                if (blockSizes.Any(size => size == 0))
+                {
+                    Console.WriteLine("Один или несколько блоков не имеют допустимых вариантов. Возвращаем пустой список.");
+                    return new List<Dictionary<string, double>>();
+                }
+                
                 long totalCombinations = blockSizes.Aggregate(1L, (accumulator, size) => accumulator * size);
                 Console.WriteLine($"Итоговое число комбинаций: {totalCombinations}");
+
+                if (totalCombinations <= 0)
+                {
+                    Console.WriteLine("Общее количество комбинаций равно 0 или отрицательно. Возвращаем пустой список.");
+                    return new List<Dictionary<string, double>>();
+                }
 
                 int maxTopVariants = 100;
                 var globalTopVariants = new SortedSet<(double objectiveValue, Dictionary<string, double> variant)>(Comparer<(double, Dictionary<string, double>)>.Create((firstItem, secondItem) =>

@@ -38,6 +38,16 @@ partial class Form1
         mainPanel = new Panel();
         footerPanel = new Panel();
         infoLabel = new Label();
+        targetSumsPanel = new Panel();
+        targetSumsLabel = new Label();
+        sem12Label = new Label();
+        sem34Label = new Label();
+        sem56Label = new Label();
+        sem78Label = new Label();
+        textBoxSem12 = new TextBox();
+        textBoxSem34 = new TextBox();
+        textBoxSem56 = new TextBox();
+        textBoxSem78 = new TextBox();
         SuspendLayout();
           // 
         // headerPanel
@@ -75,6 +85,110 @@ partial class Form1
         mainPanel.Controls.Add(button1);
         mainPanel.Controls.Add(button3);
         mainPanel.Controls.Add(button2);
+        mainPanel.Controls.Add(targetSumsPanel);
+        
+        // 
+        // targetSumsPanel
+        // 
+        targetSumsPanel.BackColor = Color.White;
+        targetSumsPanel.BorderStyle = BorderStyle.FixedSingle;
+        targetSumsPanel.Location = new Point(40, 120);
+        targetSumsPanel.Size = new Size(560, 120);
+        targetSumsPanel.Controls.Add(targetSumsLabel);
+        targetSumsPanel.Controls.Add(sem12Label);
+        targetSumsPanel.Controls.Add(sem34Label);
+        targetSumsPanel.Controls.Add(sem56Label);
+        targetSumsPanel.Controls.Add(sem78Label);
+        targetSumsPanel.Controls.Add(textBoxSem12);
+        targetSumsPanel.Controls.Add(textBoxSem34);
+        targetSumsPanel.Controls.Add(textBoxSem56);
+        targetSumsPanel.Controls.Add(textBoxSem78);
+        
+        // 
+        // targetSumsLabel
+        // 
+        targetSumsLabel.Font = new Font("Segoe UI", 11F, FontStyle.Bold);
+        targetSumsLabel.ForeColor = Color.FromArgb(50, 50, 50);
+        targetSumsLabel.Location = new Point(15, 10);
+        targetSumsLabel.Size = new Size(400, 25);
+        targetSumsLabel.Text = "Целевые суммы для пар семестров:";
+        targetSumsLabel.TextAlign = ContentAlignment.MiddleLeft;
+        
+        // 
+        // sem12Label
+        // 
+        sem12Label.Font = new Font("Segoe UI", 10F);
+        sem12Label.ForeColor = Color.FromArgb(100, 100, 100);
+        sem12Label.Location = new Point(15, 45);
+        sem12Label.Size = new Size(120, 25);
+        sem12Label.Text = "Семестры 1-2:";
+        sem12Label.TextAlign = ContentAlignment.MiddleLeft;
+        
+        // 
+        // textBoxSem12
+        // 
+        textBoxSem12.Font = new Font("Segoe UI", 10F);
+        textBoxSem12.Location = new Point(140, 43);
+        textBoxSem12.Size = new Size(80, 25);
+        textBoxSem12.Text = "60.5";
+        textBoxSem12.TextAlign = HorizontalAlignment.Center;
+        
+        // 
+        // sem34Label
+        // 
+        sem34Label.Font = new Font("Segoe UI", 10F);
+        sem34Label.ForeColor = Color.FromArgb(100, 100, 100);
+        sem34Label.Location = new Point(240, 45);
+        sem34Label.Size = new Size(120, 25);
+        sem34Label.Text = "Семестры 3-4:";
+        sem34Label.TextAlign = ContentAlignment.MiddleLeft;
+        
+        // 
+        // textBoxSem34
+        // 
+        textBoxSem34.Font = new Font("Segoe UI", 10F);
+        textBoxSem34.Location = new Point(365, 43);
+        textBoxSem34.Size = new Size(80, 25);
+        textBoxSem34.Text = "59.5";
+        textBoxSem34.TextAlign = HorizontalAlignment.Center;
+        
+        // 
+        // sem56Label
+        // 
+        sem56Label.Font = new Font("Segoe UI", 10F);
+        sem56Label.ForeColor = Color.FromArgb(100, 100, 100);
+        sem56Label.Location = new Point(15, 80);
+        sem56Label.Size = new Size(120, 25);
+        sem56Label.Text = "Семестры 5-6:";
+        sem56Label.TextAlign = ContentAlignment.MiddleLeft;
+        
+        // 
+        // textBoxSem56
+        // 
+        textBoxSem56.Font = new Font("Segoe UI", 10F);
+        textBoxSem56.Location = new Point(140, 78);
+        textBoxSem56.Size = new Size(80, 25);
+        textBoxSem56.Text = "60";
+        textBoxSem56.TextAlign = HorizontalAlignment.Center;
+        
+        // 
+        // sem78Label
+        // 
+        sem78Label.Font = new Font("Segoe UI", 10F);
+        sem78Label.ForeColor = Color.FromArgb(100, 100, 100);
+        sem78Label.Location = new Point(240, 80);
+        sem78Label.Size = new Size(120, 25);
+        sem78Label.Text = "Семестры 7-8:";
+        sem78Label.TextAlign = ContentAlignment.MiddleLeft;
+        
+        // 
+        // textBoxSem78
+        // 
+        textBoxSem78.Font = new Font("Segoe UI", 10F);
+        textBoxSem78.Location = new Point(365, 78);
+        textBoxSem78.Size = new Size(80, 25);
+        textBoxSem78.Text = "60";
+        textBoxSem78.TextAlign = HorizontalAlignment.Center;
         
         // 
         // footerPanel
@@ -165,14 +279,14 @@ partial class Form1
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Color.FromArgb(245, 247, 250);
-        ClientSize = new Size(640, 280);
+        ClientSize = new Size(640, 420);
         Controls.Add(mainPanel);
         Controls.Add(headerPanel);
         Controls.Add(footerPanel);
         Font = new Font("Segoe UI", 9F);
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
-        MinimumSize = new Size(640, 280);
+        MinimumSize = new Size(640, 420);
         Name = "Form1";
         StartPosition = FormStartPosition.CenterScreen;
         Text = "🎓 Система оптимизации учебного плана";
@@ -180,6 +294,8 @@ partial class Form1
         
         headerPanel.ResumeLayout(false);
         mainPanel.ResumeLayout(false);
+        targetSumsPanel.ResumeLayout(false);
+        targetSumsPanel.PerformLayout();
         footerPanel.ResumeLayout(false);
         ResumeLayout(false);
     }
@@ -196,4 +312,14 @@ partial class Form1
     private Panel mainPanel;
     private Panel footerPanel;
     private Label infoLabel;
+    private Panel targetSumsPanel;
+    private Label targetSumsLabel;
+    private Label sem12Label;
+    private Label sem34Label;
+    private Label sem56Label;
+    private Label sem78Label;
+    private TextBox textBoxSem12;
+    private TextBox textBoxSem34;
+    private TextBox textBoxSem56;
+    private TextBox textBoxSem78;
 }

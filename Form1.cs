@@ -125,18 +125,49 @@ namespace Optimizations
                             }
                         }
 
-                        if (currentDisciplines == null)
+                        if (currentDisciplines == null || currentDisciplines.Count == 0)
                         {
-                            MessageBox.Show("Не удалось загрузить данные из файла.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            MessageBox.Show("Не удалось загрузить данные из файла или файл не содержит дисциплин.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
                             progressBar.Visible = false;
                             statusLabel.Text = "Ошибка загрузки данных";
                             button1.Enabled = true;
                             return;
                         }
 
+                        HashSet<string> excludedDisciplineNames = new HashSet<string>();
+                        using (var excludeForm = new ExcludeDisciplinesForm(currentDisciplines))
+                        {
+                            if (excludeForm.ShowDialog() == DialogResult.OK)
+                            {
+                                excludedDisciplineNames = excludeForm.ExcludedDisciplineNames;
+                            }
+                            else
+                            {
+                                statusLabel.Text = "Выбор исключаемых дисциплин отменен. Оптимизация без исключений.";
+                            }
+                        }
+
                         statusLabel.Text = "Генерация вариантов оптимизации...";
+                        
+                        var targetSums = GetTargetSumsFromTextBoxes();
+                        if (targetSums == null)
+                        {
+                            progressBar.Visible = false;
+                            statusLabel.Text = "Ошибка в целевых суммах";
+                            button1.Enabled = true;
+                            return;
+                        }
+                        
+                        if (!ValidateTargetSums(currentDisciplines, targetSums))
+                        {
+                            progressBar.Visible = false;
+                            statusLabel.Text = "Оптимизация отменена пользователем";
+                            button1.Enabled = true;
+                            return;
+                        }
+                        
                         var semesterDisciplinesArray = OptimizationService.PrepareSemDisc(currentDisciplines);
-                        var validVariants = await OptimizationService.GenerateValidVariantsAsync(currentDisciplines);
+                        var validVariants = await OptimizationService.GenerateValidVariantsAsync(currentDisciplines, excludedDisciplineNames, targetSums);
                         statusLabel.Text = "Расчет целевой функции...";
                         var scoredVariants = new ConcurrentBag<(Dictionary<string, double> variant, double objective)>();
                         Parallel.ForEach(validVariants, workloadVariant =>
@@ -235,6 +266,80 @@ namespace Optimizations
                 button1.Enabled = true;
                 MessageBox.Show($"Произошла ошибка при сохранении: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private List<(int Sem1, int Sem2, double TargetSum)>? GetTargetSumsFromTextBoxes()
+        {
+            try
+            {
+                var sum12 = double.Parse(textBoxSem12.Text.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
+                var sum34 = double.Parse(textBoxSem34.Text.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
+                var sum56 = double.Parse(textBoxSem56.Text.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
+                var sum78 = double.Parse(textBoxSem78.Text.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
+
+                // Валидация разумности целевых сумм
+                if (sum12 <= 0 || sum34 <= 0 || sum56 <= 0 || sum78 <= 0)
+                {
+                    MessageBox.Show("Целевые суммы должны быть положительными числами.", 
+                        "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return null;
+                }
+
+                if (sum12 > 200 || sum34 > 200 || sum56 > 200 || sum78 > 200)
+                {
+                    var result = MessageBox.Show("Одна или несколько целевых сумм кажутся очень большими (>200). Продолжить?", 
+                        "Предупреждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                    if (result == DialogResult.No)
+                        return null;
+                }
+
+                return new List<(int Sem1, int Sem2, double TargetSum)>
+                {
+                    (1, 2, sum12),
+                    (3, 4, sum34),
+                    (5, 6, sum56),
+                    (7, 8, sum78)
+                };
+            }
+            catch (FormatException)
+            {
+                MessageBox.Show("Некорректные значения в полях целевых сумм. Используйте числовые значения.", 
+                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return null;
+            }
+        }
+
+        // Добавим метод для проверки совместимости целевых сумм с данными
+        private bool ValidateTargetSums(List<Discipline> disciplines, List<(int Sem1, int Sem2, double TargetSum)> targetSums)
+        {
+            var warnings = new List<string>();
+            
+            foreach (var (sem1, sem2, targetSum) in targetSums)
+            {
+                var blockDisciplines = disciplines.Where(d => d.Semester == sem1 || d.Semester == sem2).ToList();
+                if (blockDisciplines.Count == 0)
+                {
+                    warnings.Add($"В семестрах {sem1}-{sem2} нет дисциплин");
+                    continue;
+                }
+                
+                var minPossibleSum = blockDisciplines.Sum(d => d.MinWorkload);
+                var maxPossibleSum = blockDisciplines.Sum(d => d.MaxWorkload);
+                
+                if (targetSum < minPossibleSum || targetSum > maxPossibleSum)
+                {
+                    warnings.Add($"Семестры {sem1}-{sem2}: целевая сумма {targetSum} недостижима (возможно: {minPossibleSum:F1}-{maxPossibleSum:F1})");
+                }
+            }
+            
+            if (warnings.Count > 0)
+            {
+                var warningMessage = "Обнаружены потенциальные проблемы:\n\n" + string.Join("\n", warnings) + "\n\nПродолжить оптимизацию?";
+                var result = MessageBox.Show(warningMessage, "Предупреждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                return result == DialogResult.Yes;
+            }
+            
+            return true;
         }
     }
 }

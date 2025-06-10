@@ -270,13 +270,86 @@ namespace Optimizations
             }
             currentRow++;
 
+            // Calculate sums for each semester and year
+            var semesterSums = new Dictionary<int, double>();
+            for (int sem = 1; sem <= 8; sem++)
+            {
+                semesterSums[sem] = sortedDisciplines
+                    .Where(d => d.Semester == sem)
+                    .Sum(d => variant[d.UniqueName]);
+            }
+
+            var yearSums = new Dictionary<int, double>();
+            for (int year = 1; year <= 4; year++)
+            {
+                int sem1 = (year - 1) * 2 + 1;
+                int sem2 = (year - 1) * 2 + 2;
+                yearSums[year] = semesterSums[sem1] + semesterSums[sem2];
+            }
+
+            int currentSemester = -1;
+            int currentYear = -1;
+
             foreach (var discipline in sortedDisciplines)
             {
-                worksheet.Cells[currentRow, 1].Value = discipline.Name;
+                // Add year header if we're starting a new year
+                int disciplineYear = (discipline.Semester + 1) / 2;
+                if (disciplineYear != currentYear)
+                {
+                    currentYear = disciplineYear;
+                    
+                    // Year summary row
+                    worksheet.Cells[currentRow, 1].Value = $"ГОД {currentYear}";
+                    worksheet.Cells[currentRow, 2].Value = "";
+                    worksheet.Cells[currentRow, 3].Value = yearSums[currentYear];
+                    
+                    using (var yearRange = worksheet.Cells[currentRow, 1, currentRow, 3])
+                    {
+                        yearRange.Style.Font.Bold = true;
+                        yearRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                        yearRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(173, 216, 230));
+                    }
+                    currentRow++;
+                }
+
+                if (discipline.Semester != currentSemester)
+                {
+                    currentSemester = discipline.Semester;
+                    
+                    worksheet.Cells[currentRow, 1].Value = $"  Семестр {currentSemester}";
+                    worksheet.Cells[currentRow, 2].Value = "";
+                    worksheet.Cells[currentRow, 3].Value = semesterSums[currentSemester];
+                    
+                    using (var semesterRange = worksheet.Cells[currentRow, 1, currentRow, 3])
+                    {
+                        semesterRange.Style.Font.Bold = true;
+                        semesterRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                        semesterRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(230, 230, 250));
+                    }
+                    currentRow++;
+                }
+
+                // Add discipline row with indentation
+                worksheet.Cells[currentRow, 1].Value = $"    {discipline.Name}";
                 worksheet.Cells[currentRow, 2].Value = discipline.Semester;
                 worksheet.Cells[currentRow, 3].Value = variant[discipline.UniqueName];
                 currentRow++;
             }
+
+            // Add total sum row
+            var totalSum = yearSums.Values.Sum();
+            worksheet.Cells[currentRow, 1].Value = "ИТОГО:";
+            worksheet.Cells[currentRow, 2].Value = "";
+            worksheet.Cells[currentRow, 3].Value = totalSum;
+            
+            using (var totalRange = worksheet.Cells[currentRow, 1, currentRow, 3])
+            {
+                totalRange.Style.Font.Bold = true;
+                totalRange.Style.Font.Size = 12;
+                totalRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
+                totalRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 215, 0));
+            }
+            currentRow++;
 
             return currentRow;
         }
