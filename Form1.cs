@@ -3,41 +3,63 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
 using System.Drawing;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.IO;
-using OfficeOpenXml;
+using OfficeOpenXml; 
 using System.Collections.Concurrent;
-using Optimizations; // Добавлено для доступа к Discipline, ExcelService, OptimizationService
 
 
 namespace Optimizations
 {
     public partial class Form1 : Form
     {
+        private List<Discipline>? currentDisciplines;
+        // Changed type: no longer stores objective
+        private List<Dictionary<string, double>>? currentTopVariants; 
+        private Dictionary<string, double>? currentBestVariant;
+        private HashSet<string> excludedDisciplineNames = new HashSet<string>();
+
         public Form1()
         {
             InitializeComponent();
             
-            statusLabel.Text = "Готов к работе";
+            // Button text is set in designer, no need to set here unless dynamic
+            // if (this.button1 != null) this.button1.Text = "📁 Загрузить файл"; // Already set in designer
+            // if (this.button3 != null) this.button3.Text = "💾 Сохранить"; // Already set in designer
+            // if (this.button2 != null) this.button2.Text = "❌ Закрыть"; // Already set in designer
+
+            // Initial status
+            statusLabel.Text = "✅ Готов к работе";
             progressBar.Visible = false;
-            
-            button3.Enabled = false;
-            
-            this.Icon = SystemIcons.Application;
         }
 
-        private List<Discipline>? currentDisciplines;
-        private List<(Dictionary<string, double> variant, double objective)>? currentTopVariants;
-        private Dictionary<string, double>? currentBestVariant;
+        private List<(int Sem1, int Sem2, double TargetSum)> GetTargetSemesterSums()
+        {
+            var sums = new List<(int Sem1, int Sem2, double TargetSum)>();
+            try
+            {
+                sums.Add((1, 2, double.Parse(textBoxSem12.Text.Replace(",", "."), CultureInfo.InvariantCulture)));
+                sums.Add((3, 4, double.Parse(textBoxSem34.Text.Replace(",", "."), CultureInfo.InvariantCulture)));
+                sums.Add((5, 6, double.Parse(textBoxSem56.Text.Replace(",", "."), CultureInfo.InvariantCulture)));
+                sums.Add((7, 8, double.Parse(textBoxSem78.Text.Replace(",", "."), CultureInfo.InvariantCulture)));
+            }
+            catch (FormatException ex)
+            {
+                MessageBox.Show($"Ошибка в формате целевых сумм семестров: {ex.Message}", "Ошибка ввода", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                throw; // Re-throw to stop processing
+            }
+            return sums;
+        }
 
-        private async void button1_Click(object sender, EventArgs e)
+        private async void button1_Click(object? sender, EventArgs e) 
         {
             try
             {
-                statusLabel.Text = "Выбор файла...";
+                // Step 1: Load Excel File
                 using (OpenFileDialog openFileDialog = new OpenFileDialog())
                 {
                     openFileDialog.Filter = "Excel файлы (*.xlsx)|*.xlsx|Все файлы (*.*)|*.*";
@@ -45,301 +67,280 @@ namespace Optimizations
 
                     if (openFileDialog.ShowDialog() == DialogResult.OK)
                     {
+                        string filePath = openFileDialog.FileName;
+                        string? selectedSheetName = null;
+
+                        statusLabel.Text = "⏳ Чтение файла Excel...";
+                        infoLabel.Text = "Идет загрузка данных из файла...";
                         progressBar.Visible = true;
                         progressBar.Style = ProgressBarStyle.Marquee;
-                        statusLabel.Text = "Загрузка данных из Excel файла...";
-                        button1.Enabled = false;
-                        button3.Enabled = false;
+                        Application.DoEvents();
 
                         try
                         {
-                            currentDisciplines = await ExcelService.ReadExcelDataAsync(openFileDialog.FileName);
+                            currentDisciplines = await ExcelService.ReadExcelDataAsync(filePath);
                         }
                         catch (InvalidOperationException ex) when (ex.Message == "MultipleSheets")
                         {
-                            statusLabel.Text = "Выбор листа Excel...";
-                            using (var excelPackage = new OfficeOpenXml.ExcelPackage(new FileInfo(openFileDialog.FileName)))
+                            using (var package = new ExcelPackage(new FileInfo(filePath)))
                             {
-                                var worksheetNames = excelPackage.Workbook.Worksheets.Select(worksheet => worksheet.Name).ToArray();
-                                using (var sheetSelectionForm = new Form())
+                                var sheetNames = package.Workbook.Worksheets.Select(ws => ws.Name).ToArray();
+                                using (var sheetForm = new Form())
                                 {
-                                    sheetSelectionForm.Text = "Выберите лист";
-                                    sheetSelectionForm.Width = 300;
-                                    sheetSelectionForm.Height = 150;
-                                    sheetSelectionForm.FormBorderStyle = FormBorderStyle.FixedDialog;
-                                    sheetSelectionForm.StartPosition = FormStartPosition.CenterParent;
-                                    sheetSelectionForm.MaximizeBox = false;
-                                    sheetSelectionForm.MinimizeBox = false;
-                                    sheetSelectionForm.BackColor = Color.White;
-                                    sheetSelectionForm.Font = new Font("Segoe UI", 9F);
+                                    sheetForm.Text = "Выберите лист";
+                                    sheetForm.Width = 300;
+                                    sheetForm.Height = 150;
+                                    sheetForm.FormBorderStyle = FormBorderStyle.FixedDialog;
+                                    sheetForm.StartPosition = FormStartPosition.CenterParent;
+                                    sheetForm.MaximizeBox = false;
+                                    sheetForm.MinimizeBox = false;
 
-                                    var instructionLabel = new Label
-                                    {
-                                        Text = "Выберите лист для загрузки:",
-                                        Location = new Point(10, 10),
-                                        AutoSize = true,
-                                        Font = new Font("Segoe UI", 10F)
-                                    };
+                                    var label = new Label { Text = "В файле несколько листов. Выберите один:", Location = new Point(10, 10), AutoSize = true };
+                                    var comboBox = new ComboBox { Location = new Point(10, 40), Width = 260, DropDownStyle = ComboBoxStyle.DropDownList };
+                                    comboBox.Items.AddRange(sheetNames);
+                                    if (comboBox.Items.Count > 0) comboBox.SelectedIndex = 0;
+                                    var okButton = new Button { Text = "OK", DialogResult = DialogResult.OK, Location = new Point(100, 70) };
 
-                                    var sheetComboBox = new ComboBox
-                                    {
-                                        Location = new Point(10, 40),
-                                        Width = 260,
-                                        DropDownStyle = ComboBoxStyle.DropDownList,
-                                        Font = new Font("Segoe UI", 10F)
-                                    };
-                                    sheetComboBox.Items.AddRange(worksheetNames);
-                                    sheetComboBox.SelectedIndex = 0;
+                                    sheetForm.Controls.AddRange(new Control[] { label, comboBox, okButton });
+                                    sheetForm.AcceptButton = okButton;
 
-                                    var okButton = new Button
-                                    {
-                                        Text = "OK",
-                                        DialogResult = DialogResult.OK,
-                                        Location = new Point(100, 70),
-                                        BackColor = Color.FromArgb(0, 123, 255),
-                                        ForeColor = Color.White,
-                                        FlatStyle = FlatStyle.Flat,
-                                        Font = new Font("Segoe UI", 10F)
-                                    };
-                                    okButton.FlatAppearance.BorderSize = 0;
-                                    sheetSelectionForm.Controls.AddRange(new Control[] { instructionLabel, sheetComboBox, okButton });
-                                    sheetSelectionForm.AcceptButton = okButton;
 
-                                    if (sheetSelectionForm.ShowDialog() == DialogResult.OK)
+                                    if (sheetForm.ShowDialog(this) == DialogResult.OK && comboBox.SelectedItem != null)
                                     {
-                                        var selectedSheetName = sheetComboBox.SelectedItem?.ToString();
-                                        if (selectedSheetName != null)
-                                        {
-                                            statusLabel.Text = $"Загрузка данных из листа '{selectedSheetName}'...";
-                                            currentDisciplines = await ExcelService.ReadExcelDataAsync(openFileDialog.FileName, selectedSheetName);
-                                        }
+                                        selectedSheetName = comboBox.SelectedItem.ToString();
+                                        currentDisciplines = await ExcelService.ReadExcelDataAsync(filePath, selectedSheetName);
                                     }
                                     else
                                     {
+                                        infoLabel.Text = "Загрузите Excel файл для оптимизации расписания";
+                                        statusLabel.Text = "⚠️ Чтение файла отменено.";
                                         progressBar.Visible = false;
-                                        statusLabel.Text = "Готов к работе";
-                                        button1.Enabled = true;
-                                        return;
+                                        return; 
                                     }
                                 }
                             }
                         }
-
+                        
                         if (currentDisciplines == null || currentDisciplines.Count == 0)
                         {
-                            MessageBox.Show("Не удалось загрузить данные из файла или файл не содержит дисциплин.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            MessageBox.Show("Не удалось загрузить дисциплины из файла.", "Ошибка данных", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            infoLabel.Text = "Загрузите Excel файл для оптимизации расписания";
+                            statusLabel.Text = "⚠️ Ошибка загрузки данных.";
                             progressBar.Visible = false;
-                            statusLabel.Text = "Ошибка загрузки данных";
-                            button1.Enabled = true;
                             return;
                         }
 
-                        HashSet<string> excludedDisciplineNames = new HashSet<string>();
-                        using (var excludeForm = new ExcludeDisciplinesForm(currentDisciplines))
+                        statusLabel.Text = "✅ Данные загружены. Укажите исключения.";
+                        infoLabel.Text = "Данные из Excel успешно загружены.";
+                        progressBar.Visible = false;
+                        Application.DoEvents();
+
+                        // Step 2: Select Exclusions
+                        using (var excludeForm = new ExcludeDisciplinesForm(currentDisciplines, excludedDisciplineNames))
                         {
-                            if (excludeForm.ShowDialog() == DialogResult.OK)
+                            if (excludeForm.ShowDialog(this) == DialogResult.OK)
                             {
                                 excludedDisciplineNames = excludeForm.ExcludedDisciplineNames;
+                                statusLabel.Text = "⏳ Подготовка к оптимизации...";
+                                infoLabel.Text = "Исключения приняты. Введите целевые суммы и запустите оптимизацию.";
+                                // At this point, the user has confirmed exclusions.
+                                // Now, get target sums and proceed with optimization.
                             }
                             else
                             {
-                                statusLabel.Text = "Выбор исключаемых дисциплин отменен. Оптимизация без исключений.";
+                                infoLabel.Text = "Загрузите Excel файл для оптимизации расписания";
+                                statusLabel.Text = "⚠️ Выбор исключений отменен. Оптимизация не запущена.";
+                                progressBar.Visible = false;
+                                return; 
                             }
                         }
 
-                        statusLabel.Text = "Генерация вариантов оптимизации...";
-                        
-                        var targetSums = GetTargetSumsFromTextBoxes();
-                        if (targetSums == null)
+                        // Step 3: Get Target Sums (already part of the flow, but now after exclusions)
+                        List<(int Sem1, int Sem2, double TargetSum)> targetSemesterSums;
+                        try
                         {
+                            targetSemesterSums = GetTargetSemesterSums();
+                        }
+                        catch
+                        {
+                            statusLabel.Text = "⚠️ Ошибка в целевых суммах. Оптимизация не запущена.";
                             progressBar.Visible = false;
-                            statusLabel.Text = "Ошибка в целевых суммах";
-                            button1.Enabled = true;
                             return;
                         }
                         
-                        if (!ValidateTargetSums(currentDisciplines, targetSums))
-                        {
-                            progressBar.Visible = false;
-                            statusLabel.Text = "Оптимизация отменена пользователем";
-                            button1.Enabled = true;
-                            return;
-                        }
-                        
-                        var semesterDisciplinesArray = OptimizationService.PrepareSemDisc(currentDisciplines);
-                        var validVariants = await OptimizationService.GenerateValidVariantsAsync(currentDisciplines, excludedDisciplineNames, targetSums);
-                        statusLabel.Text = "Расчет целевой функции...";
-                        var scoredVariants = new ConcurrentBag<(Dictionary<string, double> variant, double objective)>();
-                        Parallel.ForEach(validVariants, workloadVariant =>
-                        {
-                            double objectiveValue = OptimizationService.CalculateObjectiveFast(semesterDisciplinesArray, workloadVariant);
-                            scoredVariants.Add((workloadVariant, objectiveValue));
-                        });
+                        // Step 4: Perform Optimization
+                        infoLabel.Text = "Идет оптимизация расписания...";
+                        statusLabel.Text = "⏳ Идет оптимизация...";
+                        progressBar.Visible = true;
+                        progressBar.Style = ProgressBarStyle.Marquee;
+                        Application.DoEvents(); 
 
-                        statusLabel.Text = "Сортировка результатов...";
-                        currentTopVariants = scoredVariants
-                            .OrderByDescending(variantTuple => variantTuple.objective)
-                            .Take(10000)
-                            .ToList();
+                        var validVariants = await OptimizationService.GenerateValidVariantsAsync(currentDisciplines, excludedDisciplineNames, targetSemesterSums);
+
+                        progressBar.Style = ProgressBarStyle.Continuous;
+                        progressBar.Value = 0; 
+
+                        if (validVariants == null || validVariants.Count == 0)
+                        {
+                             // Removed: MessageBox.Show("Не найдено допустимых вариантов после генерации.", "Нет вариантов", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                             infoLabel.Text = "Допустимых вариантов не найдено. Сохранение исходных данных...";
+                             statusLabel.Text = "ℹ️ Допустимых вариантов не найдено. Сохранение исходных данных...";
+                             // progressBar.Visible = false; // Keep progress bar for saving operation
+
+                             // New logic: Directly save initial data if no variants are found
+                             if (currentDisciplines != null && currentDisciplines.Count > 0)
+                             {
+                                 // Removed: DialogResult dialogResult = MessageBox.Show(...)
+                                 using (SaveFileDialog saveFileDialog = new SaveFileDialog())
+                                 {
+                                     saveFileDialog.Filter = "Excel файлы (*.xlsx)|*.xlsx";
+                                     saveFileDialog.Title = "Сохранить исходные данные (вариантов не найдено)";
+                                     saveFileDialog.DefaultExt = "xlsx";
+                                     saveFileDialog.AddExtension = true;
+                                     saveFileDialog.FileName = "Data.xlsx"; // Changed filename to be more specific
+
+                                     if (saveFileDialog.ShowDialog() == DialogResult.OK)
+                                     {
+                                         try
+                                         {
+                                             statusLabel.Text = "⏳ Сохранение исходных данных...";
+                                             infoLabel.Text = "Идет сохранение исходных данных в Excel...";
+                                             progressBar.Visible = true;
+                                             progressBar.Style = ProgressBarStyle.Marquee;
+                                             Application.DoEvents();
+
+                                             await ExcelService.SaveInitialDataAsSingleVariantAsync(saveFileDialog.FileName, currentDisciplines);
+                                             
+                                             MessageBox.Show("Исходные данные (как единственный вариант) успешно сохранены, так как других вариантов не найдено.", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                                             statusLabel.Text = "✅ Исходные данные сохранены.";
+                                             infoLabel.Text = "Исходные данные сохранены. Готов к новой задаче.";
+                                         }
+                                         catch (Exception exSave)
+                                         {
+                                             MessageBox.Show($"Произошла ошибка при сохранении исходных данных: {exSave.Message}", "Ошибка сохранения", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                             statusLabel.Text = "❌ Ошибка сохранения исходных данных.";
+                                             infoLabel.Text = "Произошла ошибка при сохранении исходных данных.";
+                                         }
+                                         finally
+                                         {
+                                             progressBar.Visible = false;
+                                         }
+                                     }
+                                     else
+                                     {
+                                         statusLabel.Text = "⚠️ Сохранение исходных данных отменено пользователем.";
+                                         infoLabel.Text = "Оптимизация завершена, вариантов не найдено. Сохранение отменено.";
+                                         progressBar.Visible = false;
+                                     }
+                                 }
+                             }
+                             else // currentDisciplines is null or empty, should not happen if load was successful
+                             {
+                                 MessageBox.Show("Исходные данные для сохранения отсутствуют.", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                 statusLabel.Text = "⚠️ Ошибка: нет исходных данных для сохранения.";
+                                 progressBar.Visible = false;
+                             }
+                             return;
+                        }
+
+                        currentTopVariants = validVariants; 
 
                         if (currentTopVariants.Count > 0)
                         {
-                            var bestVariantTuple = currentTopVariants.First();
-                            currentBestVariant = bestVariantTuple.Item1;
-
-                            Console.WriteLine("\nЛучший допустимый вариант:");
-                            Console.WriteLine(string.Join(", ", bestVariantTuple.Item1.Select(keyValue => $"{keyValue.Key}:{keyValue.Value}")));
-                            
-                            statusLabel.Text = "Заполнение таблицы результатов...";
-                            
-                            statusLabel.Text = "Готово! Оптимизация завершена успешно";
-                            button3.Enabled = true;
+                            currentBestVariant = currentTopVariants.FirstOrDefault(); 
+                            statusLabel.Text = $"🏆 Оптимизация завершена! Найдено {currentTopVariants.Count} вариантов.";
+                            infoLabel.Text = "Оптимизация завершена. Результаты готовы к сохранению.";
                         }
                         else
                         {
                             MessageBox.Show("Допустимых вариантов не найдено.", "Информация", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                            statusLabel.Text = "Допустимых вариантов не найдено";
+                            infoLabel.Text = "Оптимизация завершена.";
+                            statusLabel.Text = "ℹ️ Допустимых вариантов не найдено.";
                         }
-                        
                         progressBar.Visible = false;
-                        button1.Enabled = true;
+                    }
+                    else // User cancelled OpenFileDialog
+                    {
+                        infoLabel.Text = "Загрузите Excel файл для оптимизации расписания";
+                        statusLabel.Text = "✅ Готов к работе";
+                        progressBar.Visible = false;
                     }
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Произошла ошибка: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"Произошла ошибка: {ex.Message}\n{ex.StackTrace}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                infoLabel.Text = "Загрузите Excel файл для оптимизации расписания";
+                statusLabel.Text = "❌ Произошла ошибка.";
                 progressBar.Visible = false;
-                statusLabel.Text = "Ошибка выполнения операции";
-                button1.Enabled = true;
             }
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        private async void button3_Click_1(object? sender, EventArgs e) 
         {
-            this.Close();
-        }
+            if (currentDisciplines == null || currentTopVariants == null || currentBestVariant == null) // currentBestVariant could be null if currentTopVariants is empty
+            {
+                MessageBox.Show("Сначала загрузите и обработайте данные! Валидных вариантов не найдено.", "Предупреждение", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                statusLabel.Text = "⚠️ Нет данных для сохранения.";
+                return;
+            }
+            if (currentTopVariants.Count == 0 || currentBestVariant == null)
+            {
+                 MessageBox.Show("Нет вариантов для сохранения.", "Предупреждение", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                statusLabel.Text = "⚠️ Нет данных для сохранения.";
+                return;
+            }
 
-        private async void button3_Click_1(object sender, EventArgs e)
-        {
             try
             {
-                if (currentDisciplines == null || currentTopVariants == null || currentBestVariant == null)
+                using (SaveFileDialog saveFileDialog = new SaveFileDialog())
                 {
-                    MessageBox.Show("Сначала загрузите и обработайте данные!", "Предупреждение", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
+                    saveFileDialog.Filter = "Excel файлы (*.xlsx)|*.xlsx";
+                    saveFileDialog.Title = "Сохранить результаты";
+                    saveFileDialog.DefaultExt = "xlsx";
+                    saveFileDialog.AddExtension = true;
+                    saveFileDialog.FileName = "Optimization_Results.xlsx";
 
-                using (SaveFileDialog saveResultsDialog = new SaveFileDialog())
-                {
-                    saveResultsDialog.Filter = "Excel файлы (*.xlsx)|*.xlsx";
-                    saveResultsDialog.Title = "Сохранить результаты";
-                    saveResultsDialog.DefaultExt = "xlsx";
-                    saveResultsDialog.AddExtension = true;
-
-                    if (saveResultsDialog.ShowDialog() == DialogResult.OK)
+                    if (saveFileDialog.ShowDialog() == DialogResult.OK)
                     {
+                        statusLabel.Text = "⏳ Сохранение результатов...";
+                        infoLabel.Text = "Идет сохранение результатов в Excel...";
                         progressBar.Visible = true;
                         progressBar.Style = ProgressBarStyle.Marquee;
-                        statusLabel.Text = "Сохранение результатов в Excel файл...";
-                        button3.Enabled = false;
-                        button1.Enabled = false;
+                        Application.DoEvents();
+
+                        // Pass currentTopVariants directly
+                        await ExcelService.SaveResultsToExcelAsync(saveFileDialog.FileName, currentDisciplines, currentBestVariant, currentTopVariants); 
                         
-                        int variantsToSave = Math.Min(currentTopVariants.Count, 50);
-                        await ExcelService.SaveResultsToExcelAsync(saveResultsDialog.FileName, currentDisciplines, currentBestVariant, currentTopVariants);
-                        
+                        MessageBox.Show("Результаты успешно сохранены!", "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        statusLabel.Text = "✅ Результаты сохранены.";
+                        infoLabel.Text = "Результаты сохранены. Готов к новой задаче.";
                         progressBar.Visible = false;
-                        statusLabel.Text = $"Результаты сохранены! Файл: {Path.GetFileName(saveResultsDialog.FileName)}";
-                        button3.Enabled = true;
-                        button1.Enabled = true;
-                        
-                        MessageBox.Show($"Результаты успешно сохранены!\nСохранено вариантов: {variantsToSave}\nФайл: {saveResultsDialog.FileName}", 
-                            "Успех", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    }
+                    else
+                    {
+                        statusLabel.Text = "⚠️ Сохранение отменено.";
+                        progressBar.Visible = false;
                     }
                 }
             }
             catch (Exception ex)
             {
+                MessageBox.Show($"Произошла ошибка при сохранении: {ex.Message}", "Ошибка сохранения", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                statusLabel.Text = "❌ Ошибка сохранения.";
+                infoLabel.Text = "Произошла ошибка при сохранении.";
                 progressBar.Visible = false;
-                statusLabel.Text = "Ошибка сохранения файла";
-                button3.Enabled = true;
-                button1.Enabled = true;
-                MessageBox.Show($"Произошла ошибка при сохранении: {ex.Message}", "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private List<(int Sem1, int Sem2, double TargetSum)>? GetTargetSumsFromTextBoxes()
+        // private void exitButton_Click(object? sender, EventArgs e) // REMOVED
+        // {
+        //     this.Close();
+        // }
+
+        private void button2_Click(object? sender, EventArgs e) // New handler for "Закрыть" button
         {
-            try
-            {
-                var sum12 = double.Parse(textBoxSem12.Text.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
-                var sum34 = double.Parse(textBoxSem34.Text.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
-                var sum56 = double.Parse(textBoxSem56.Text.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
-                var sum78 = double.Parse(textBoxSem78.Text.Replace(",", "."), System.Globalization.CultureInfo.InvariantCulture);
-
-                // Валидация разумности целевых сумм
-                if (sum12 <= 0 || sum34 <= 0 || sum56 <= 0 || sum78 <= 0)
-                {
-                    MessageBox.Show("Целевые суммы должны быть положительными числами.", 
-                        "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return null;
-                }
-
-                if (sum12 > 200 || sum34 > 200 || sum56 > 200 || sum78 > 200)
-                {
-                    var result = MessageBox.Show("Одна или несколько целевых сумм кажутся очень большими (>200). Продолжить?", 
-                        "Предупреждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                    if (result == DialogResult.No)
-                        return null;
-                }
-
-                return new List<(int Sem1, int Sem2, double TargetSum)>
-                {
-                    (1, 2, sum12),
-                    (3, 4, sum34),
-                    (5, 6, sum56),
-                    (7, 8, sum78)
-                };
-            }
-            catch (FormatException)
-            {
-                MessageBox.Show("Некорректные значения в полях целевых сумм. Используйте числовые значения.", 
-                    "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return null;
-            }
-        }
-
-        // Добавим метод для проверки совместимости целевых сумм с данными
-        private bool ValidateTargetSums(List<Discipline> disciplines, List<(int Sem1, int Sem2, double TargetSum)> targetSums)
-        {
-            var warnings = new List<string>();
-            
-            foreach (var (sem1, sem2, targetSum) in targetSums)
-            {
-                var blockDisciplines = disciplines.Where(d => d.Semester == sem1 || d.Semester == sem2).ToList();
-                if (blockDisciplines.Count == 0)
-                {
-                    warnings.Add($"В семестрах {sem1}-{sem2} нет дисциплин");
-                    continue;
-                }
-                
-                var minPossibleSum = blockDisciplines.Sum(d => d.MinWorkload);
-                var maxPossibleSum = blockDisciplines.Sum(d => d.MaxWorkload);
-                
-                if (targetSum < minPossibleSum || targetSum > maxPossibleSum)
-                {
-                    warnings.Add($"Семестры {sem1}-{sem2}: целевая сумма {targetSum} недостижима (возможно: {minPossibleSum:F1}-{maxPossibleSum:F1})");
-                }
-            }
-            
-            if (warnings.Count > 0)
-            {
-                var warningMessage = "Обнаружены потенциальные проблемы:\n\n" + string.Join("\n", warnings) + "\n\nПродолжить оптимизацию?";
-                var result = MessageBox.Show(warningMessage, "Предупреждение", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-                return result == DialogResult.Yes;
-            }
-            
-            return true;
+            this.Close();
         }
     }
 }

@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "/Na2L2dWlUo=",
+  "dgSpecHash": "LUwlXaDYoZc=",
   "success": true,
-  "projectFilePath": "C:\\Users\\Danila\\Documents\\Repoes\\Optimization\\Optimizations.csproj",
+  "projectFilePath": "C:\\Users\\Danila\\Documents\\Repoes\\opt\\Optimization\\Optimizations.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Danila\\.nuget\\packages\\epplus\\8.0.5\\epplus.8.0.5.nupkg.sha512",
     "C:\\Users\\Danila\\.nuget\\packages\\epplus.interfaces\\8.0.0\\epplus.interfaces.8.0.0.nupkg.sha512",

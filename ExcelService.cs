@@ -4,10 +4,10 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using OfficeOpenXml;
+using OfficeOpenXml.Style;
 
 namespace Optimizations
 {
@@ -16,23 +16,13 @@ namespace Optimizations
         public static async Task<List<Discipline>> ReadExcelDataAsync(string filePath, string? worksheetName = null)
         {
             var disciplines = new List<Discipline>();
-            var parsingStats = new Dictionary<string, int>
-            {
-                ["Общее количество строк"] = 0,
-                ["Успешно обработано"] = 0,
-                ["Пропущено: пустое название"] = 0,
-                ["Пропущено: пустые значения"] = 0,
-                ["Пропущено: неверный формат чисел"] = 0,
-                ["Пропущено: неверный семестр"] = 0,
-                ["Пропущено: прочие ошибки"] = 0
-            };
 
             if (!File.Exists(filePath))
             {
                 throw new FileNotFoundException($"Файл не найден: {filePath}");
             }
 
-            ExcelPackage.License.SetNonCommercialPersonal("<My Name>");
+            ExcelPackage.License.SetNonCommercialPersonal("<My Name>"); // Ensure this is your actual license name or handle appropriately
             using (var package = new ExcelPackage(new FileInfo(filePath)))
             {
                 if (package.Workbook.Worksheets.Count == 0)
@@ -40,18 +30,24 @@ namespace Optimizations
                     throw new InvalidOperationException("В Excel файле нет рабочих листов");
                 }
 
-                if (string.IsNullOrEmpty(worksheetName) && package.Workbook.Worksheets.Count > 1)
+                ExcelWorksheet? worksheet;
+                if (string.IsNullOrEmpty(worksheetName))
                 {
-                    throw new InvalidOperationException("MultipleSheets");
+                    if (package.Workbook.Worksheets.Count > 1)
+                    {
+                        // Let Form1 handle sheet selection
+                        throw new InvalidOperationException("MultipleSheets");
+                    }
+                    worksheet = package.Workbook.Worksheets[0];
                 }
-
-                var worksheet = string.IsNullOrEmpty(worksheetName) 
-                    ? package.Workbook.Worksheets[0] 
-                    : package.Workbook.Worksheets[worksheetName];
+                else
+                {
+                    worksheet = package.Workbook.Worksheets[worksheetName];
+                }
 
                 if (worksheet == null)
                 {
-                    throw new InvalidOperationException($"Лист '{worksheetName}' не найден");
+                    throw new InvalidOperationException($"Лист '{worksheetName ?? "Первый лист"}' не найден");
                 }
 
                 if (worksheet.Dimension == null)
@@ -59,139 +55,105 @@ namespace Optimizations
                     throw new InvalidOperationException("Рабочий лист пуст");
                 }
 
-                int totalRows = worksheet.Dimension.Rows;
-                int totalColumns = worksheet.Dimension.Columns;
-                parsingStats["Общее количество строк"] = totalRows - 1;
+                int rowCount = worksheet.Dimension.Rows;
+                int colCount = worksheet.Dimension.Columns;
 
-                if (totalRows < 2)
+                if (rowCount < 2)
                 {
                     throw new InvalidOperationException("В файле недостаточно данных (нужно минимум 2 строки)");
                 }
 
-                if (totalColumns < 5)
+                if (colCount < 5)
                 {
                     throw new InvalidOperationException("В файле недостаточно столбцов (нужно минимум 5 столбцов)");
                 }
-
-                var columnHeaders = new[]
-                {
-                    worksheet.Cells[1, 1].Text,
-                    worksheet.Cells[1, 2].Text,
-                    worksheet.Cells[1, 3].Text,
-                    worksheet.Cells[1, 4].Text,
-                    worksheet.Cells[1, 5].Text
-                };
-
-                var columnExamples = new List<string>[5];
-                for (int i = 0; i < 5; i++)
-                {
-                    columnExamples[i] = new List<string>();
-                }
-
-                for (int rowIndex = 2; rowIndex <= Math.Min(totalRows, 6); rowIndex++)
-                {
-                    for (int colIndex = 1; colIndex <= 5; colIndex++)
-                    {
-                        var cellValue = worksheet.Cells[rowIndex, colIndex]?.Text ?? "";
-                        columnExamples[colIndex - 1].Add(cellValue);
-                    }
-                }
-
-                Console.WriteLine("Заголовки столбцов:");
-                for (int columnIndex = 0; columnIndex < columnHeaders.Length; columnIndex++)
-                {
-                    Console.WriteLine($"Столбец {columnIndex + 1}: {columnHeaders[columnIndex]}");
-                }
+                
+                // Optional: Log headers if needed for debugging
+                // var headers = new[]
+                // {
+                //     worksheet.Cells[1, 1].Text,
+                //     worksheet.Cells[1, 2].Text,
+                //     worksheet.Cells[1, 3].Text,
+                //     worksheet.Cells[1, 4].Text,
+                //     worksheet.Cells[1, 5].Text
+                // };
+                // Console.WriteLine("Заголовки столбцов: " + string.Join(", ", headers));
 
                 var tasks = new List<Task>();
-                var disciplineIndex = 0;
-                var indexLock = new object();
-                for (int rowIndex = 2; rowIndex <= totalRows; rowIndex++)
+                for (int row = 2; row <= rowCount; row++)
                 {
-                    var currentRowIndex = rowIndex;
+                    var currentRow = row; // Capture row variable for closure
                     tasks.Add(Task.Run(() =>
                     {
                         try
                         {
-                            if (currentRowIndex > totalRows)
+                            // Bounds check, though worksheet.Cells should handle out of range gracefully by returning null
+                            if (currentRow > worksheet.Dimension.Rows) 
                             {
-                                Console.WriteLine($"Пропуск строки {currentRowIndex}: строка за пределами диапазона");
+                                Console.WriteLine($"Пропуск строки {currentRow}: строка за пределами диапазона");
                                 return;
                             }
 
-                            var disciplineName = worksheet.Cells[currentRowIndex, 1]?.Text;
-                            if (string.IsNullOrWhiteSpace(disciplineName))
+                            var name = worksheet.Cells[currentRow, 1]?.Text;
+                            if (string.IsNullOrWhiteSpace(name))
                             {
-                                Console.WriteLine($"Пропуск строки {currentRowIndex}: пустое название дисциплины");
-                                lock (parsingStats) { parsingStats["Пропущено: пустое название"]++; }
+                                Console.WriteLine($"Пропуск строки {currentRow}: пустое название дисциплины");
                                 return;
                             }
 
-                            var minWorkloadText = worksheet.Cells[currentRowIndex, 2]?.Text;
-                            var maxWorkloadText = worksheet.Cells[currentRowIndex, 3]?.Text;
-                            var significanceText = worksheet.Cells[currentRowIndex, 4]?.Text;
-                            var semesterText = worksheet.Cells[currentRowIndex, 5]?.Text;
+                            var minWorkloadStr = worksheet.Cells[currentRow, 2]?.Text;
+                            var maxWorkloadStr = worksheet.Cells[currentRow, 3]?.Text;
+                            var significanceStr = worksheet.Cells[currentRow, 4]?.Text;
+                            var semesterStr = worksheet.Cells[currentRow, 5]?.Text;
 
-                            if (string.IsNullOrWhiteSpace(minWorkloadText) ||
-                                string.IsNullOrWhiteSpace(maxWorkloadText) ||
-                                string.IsNullOrWhiteSpace(significanceText) ||
-                                string.IsNullOrWhiteSpace(semesterText))
+                            if (string.IsNullOrWhiteSpace(minWorkloadStr) ||
+                                string.IsNullOrWhiteSpace(maxWorkloadStr) ||
+                                string.IsNullOrWhiteSpace(significanceStr) ||
+                                string.IsNullOrWhiteSpace(semesterStr))
                             {
-                                Console.WriteLine($"Пропуск строки {currentRowIndex}: пустые значения в ячейках");
-                                lock (parsingStats) { parsingStats["Пропущено: пустые значения"]++; }
+                                Console.WriteLine($"Пропуск строки {currentRow} ({name}): пустые значения в ячейках");
                                 return;
                             }
 
-                            double minWorkload, maxWorkload, significanceCoefficient;
-                            int semesterNumber;
+                            double minWorkload, maxWorkload, significance;
+                            int semester;
 
                             try
                             {
-                                minWorkload = double.Parse(minWorkloadText.Replace(",", "."), CultureInfo.InvariantCulture);
-                                maxWorkload = double.Parse(maxWorkloadText.Replace(",", "."), CultureInfo.InvariantCulture);
-                                significanceCoefficient = double.Parse(significanceText.Replace(",", "."), CultureInfo.InvariantCulture);
-                                semesterNumber = (int)double.Parse(semesterText.Replace(",", "."), CultureInfo.InvariantCulture);
+                                minWorkload = double.Parse(minWorkloadStr.Replace(",", "."), CultureInfo.InvariantCulture);
+                                maxWorkload = double.Parse(maxWorkloadStr.Replace(",", "."), CultureInfo.InvariantCulture);
+                                significance = double.Parse(significanceStr.Replace(",", "."), CultureInfo.InvariantCulture);
+                                semester = (int)double.Parse(semesterStr.Replace(",", "."), CultureInfo.InvariantCulture); // Or int.Parse if always integer
                             }
                             catch (FormatException)
                             {
-                                Console.WriteLine($"Пропуск строки {currentRowIndex}: некорректный формат числовых значений");
-                                lock (parsingStats) { parsingStats["Пропущено: неверный формат чисел"]++; }
+                                Console.WriteLine($"Пропуск строки {currentRow} ({name}): некорректный формат числовых значений");
                                 return;
                             }
 
-                            if (semesterNumber < 1 || semesterNumber > 8)
+                            if (semester < 1 || semester > 8) // Assuming 8 semesters max
                             {
-                                Console.WriteLine($"Пропуск строки {currentRowIndex}: некорректный номер семестра ({semesterNumber})");
-                                lock (parsingStats) { parsingStats["Пропущено: неверный семестр"]++; }
+                                Console.WriteLine($"Пропуск строки {currentRow} ({name}): некорректный номер семестра ({semester})");
                                 return;
                             }
 
-                            int currentDisciplineIndex;
-                            lock (indexLock)
+                            var discipline = new Discipline(name) // Pass name to constructor
                             {
-                                currentDisciplineIndex = disciplineIndex++;
-                            }
-
-                            var newDiscipline = new Discipline
-                            {
-                                Name = disciplineName,
                                 MinWorkload = minWorkload,
                                 MaxWorkload = maxWorkload,
-                                SignificanceCoefficient = significanceCoefficient,
-                                Semester = semesterNumber,
-                                Index = currentDisciplineIndex
+                                SignificanceCoefficient = significance,
+                                Semester = semester
                             };
 
-                            lock (disciplines)
+                            lock (disciplines) // Ensure thread-safe add to list
                             {
-                                disciplines.Add(newDiscipline);
-                                parsingStats["Успешно обработано"]++;
+                                disciplines.Add(discipline);
                             }
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"Ошибка при обработке строки {currentRowIndex}: {ex.Message}");
-                            lock (parsingStats) { parsingStats["Пропущено: прочие ошибки"]++; }
+                            // Log detailed error, perhaps with row number and cell content if possible
+                            Console.WriteLine($"Ошибка при обработке строки {currentRow}: {ex.Message}");
                         }
                     }));
                 }
@@ -200,197 +162,137 @@ namespace Optimizations
 
             if (disciplines.Count == 0)
             {
-                throw new InvalidOperationException("Не удалось прочитать ни одной дисциплины из файла");
+                // This might be a valid scenario if the file is empty or all rows are skipped.
+                // Consider if this should be an exception or just an empty list.
+                // For now, matching Avtomat's behavior:
+                throw new InvalidOperationException("Не удалось прочитать ни одной дисциплины из файла. Проверьте формат данных и консоль на наличие ошибок.");
             }
 
             Console.WriteLine($"\nУспешно прочитано дисциплин: {disciplines.Count}");
-            
-            ShowParsingInfo(disciplines, parsingStats);
-            
             return disciplines;
         }
 
-        public static async Task SaveResultsToExcelAsync(string filePath, List<Discipline> disciplines, Dictionary<string, double> bestVariant, List<(Dictionary<string, double> variant, double objective)> topVariants)
+        public static async Task SaveInitialDataAsSingleVariantAsync(string filePath, List<Discipline> initialDisciplines)
         {
-            ExcelPackage.License.SetNonCommercialPersonal("<My Name>");
-            using (var excelPackage = new ExcelPackage())
+            ExcelPackage.License.SetNonCommercialPersonal("<My Name>"); // Ensure this is your actual license name or handle appropriately
+            using (var package = new ExcelPackage())
             {
-                var resultsWorksheet = excelPackage.Workbook.Worksheets.Add("Результаты");
-                var sortedDisciplines = disciplines.OrderBy(discipline => discipline.Semester).ToList();
+                var worksheet = package.Workbook.Worksheets.Add("Исходные данные (1 вариант)");
                 int currentRow = 1;
-                int variantsToSave = Math.Min(topVariants.Count, 50);
 
-                currentRow = WriteVariantTable(resultsWorksheet, sortedDisciplines, bestVariant,
-                    "ЛУЧШИЙ ВАРИАНТ", currentRow, Color.Yellow);
+                var sortedDisciplines = initialDisciplines.OrderBy(d => d.Semester).ThenBy(d => d.Name).ToList();
 
-                currentRow += 2;
-                for (int variantIndex = 1; variantIndex < variantsToSave; variantIndex++)
-                {
-                    var variant = topVariants[variantIndex];
-                    string variantTitle = $"ВАРИАНТ {variantIndex}";
-                    Color highlightColor = Color.LightGray;
-
-                    currentRow = WriteVariantTable(resultsWorksheet, sortedDisciplines, variant.variant,
-                        variantTitle, currentRow, highlightColor);
-
-                    currentRow += 2;
-                }
-
-                resultsWorksheet.Cells[resultsWorksheet.Dimension.Address].AutoFitColumns();
-                await excelPackage.SaveAsAsync(new FileInfo(filePath));
-            }
-        }
-
-        private static int WriteVariantTable(ExcelWorksheet worksheet, List<Discipline> sortedDisciplines, 
-            Dictionary<string, double> variant, string title, int startRow, Color highlightColor)
-        {
-            int currentRow = startRow;
-
-            worksheet.Cells[currentRow, 1].Value = title;
-            worksheet.Cells[currentRow, 1, currentRow, 3].Merge = true;
-            using (var titleRange = worksheet.Cells[currentRow, 1, currentRow, 3])
-            {
-                titleRange.Style.Font.Bold = true;
-                titleRange.Style.Font.Size = 12;
-                titleRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                titleRange.Style.Fill.BackgroundColor.SetColor(highlightColor);
-                titleRange.Style.HorizontalAlignment = OfficeOpenXml.Style.ExcelHorizontalAlignment.Center;
-            }
-            currentRow++;
-
-            worksheet.Cells[currentRow, 1].Value = "Название дисциплины";
-            worksheet.Cells[currentRow, 2].Value = "Семестр";
-            worksheet.Cells[currentRow, 3].Value = "Трудоемкость";
-            
-            using (var headerRange = worksheet.Cells[currentRow, 1, currentRow, 3])
-            {
-                headerRange.Style.Font.Bold = true;
-                headerRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                headerRange.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
-            }
-            currentRow++;
-
-            var semesterSums = new Dictionary<int, double>();
-            for (int sem = 1; sem <= 8; sem++)
-            {
-                semesterSums[sem] = sortedDisciplines
-                    .Where(d => d.Semester == sem)
-                    .Sum(d => variant[d.UniqueName]);
-            }
-
-            var yearSums = new Dictionary<int, double>();
-            for (int year = 1; year <= 4; year++)
-            {
-                int sem1 = (year - 1) * 2 + 1;
-                int sem2 = (year - 1) * 2 + 2;
-                yearSums[year] = semesterSums[sem1] + semesterSums[sem2];
-            }
-
-            int currentSemester = -1;
-            int currentYear = -1;
-
-            foreach (var discipline in sortedDisciplines)
-            {
-                int disciplineYear = (discipline.Semester + 1) / 2;
-                if (disciplineYear != currentYear)
-                {
-                    currentYear = disciplineYear;
-                    
-                    worksheet.Cells[currentRow, 1].Value = $"ГОД {currentYear}";
-                    worksheet.Cells[currentRow, 2].Value = "";
-                    worksheet.Cells[currentRow, 3].Value = yearSums[currentYear];
-                    
-                    using (var yearRange = worksheet.Cells[currentRow, 1, currentRow, 3])
-                    {
-                        yearRange.Style.Font.Bold = true;
-                        yearRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                        yearRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(173, 216, 230));
-                    }
-                    currentRow++;
-                }
-
-                if (discipline.Semester != currentSemester)
-                {
-                    currentSemester = discipline.Semester;
-                    
-                    worksheet.Cells[currentRow, 1].Value = $"  Семестр {currentSemester}";
-                    worksheet.Cells[currentRow, 2].Value = "";
-                    worksheet.Cells[currentRow, 3].Value = semesterSums[currentSemester];
-                    
-                    using (var semesterRange = worksheet.Cells[currentRow, 1, currentRow, 3])
-                    {
-                        semesterRange.Style.Font.Bold = true;
-                        semesterRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                        semesterRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(230, 230, 250));
-                    }
-                    currentRow++;
-                }
-
-                worksheet.Cells[currentRow, 1].Value = $"    {discipline.Name}";
-                worksheet.Cells[currentRow, 2].Value = discipline.Semester;
-                worksheet.Cells[currentRow, 3].Value = variant[discipline.UniqueName];
+                // Header for the "single variant"
+                worksheet.Cells[currentRow, 1].Value = "Исходные данные (сохранены как один вариант)";
+                worksheet.Cells[currentRow, 1, currentRow, 4].Merge = true; // Span 4 columns
+                worksheet.Cells[currentRow, 1].Style.Font.Bold = true;
+                worksheet.Cells[currentRow, 1].Style.Font.Size = 14;
+                worksheet.Cells[currentRow, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                worksheet.Cells[currentRow, 1].Style.Fill.PatternType = ExcelFillStyle.Solid;
+                worksheet.Cells[currentRow, 1].Style.Fill.BackgroundColor.SetColor(Color.LightSkyBlue);
                 currentRow++;
-            }
 
-            var totalSum = yearSums.Values.Sum();
-            worksheet.Cells[currentRow, 1].Value = "ИТОГО:";
-            worksheet.Cells[currentRow, 2].Value = "";
-            worksheet.Cells[currentRow, 3].Value = totalSum;
-            
-            using (var totalRange = worksheet.Cells[currentRow, 1, currentRow, 3])
-            {
-                totalRange.Style.Font.Bold = true;
-                totalRange.Style.Font.Size = 12;
-                totalRange.Style.Fill.PatternType = OfficeOpenXml.Style.ExcelFillStyle.Solid;
-                totalRange.Style.Fill.BackgroundColor.SetColor(Color.FromArgb(255, 215, 0));
-            }
-            currentRow++;
+                // Column Headers
+                worksheet.Cells[currentRow, 1].Value = "Название дисциплины";
+                worksheet.Cells[currentRow, 2].Value = "Семестр";
+                worksheet.Cells[currentRow, 3].Value = "Мин. трудоемкость";
+                worksheet.Cells[currentRow, 4].Value = "Макс. трудоемкость";
+                
+                using (var range = worksheet.Cells[currentRow, 1, currentRow, 4])
+                {
+                    range.Style.Font.Bold = true;
+                    range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                    range.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
+                    range.Style.HorizontalAlignment = ExcelHorizontalAlignment.CenterContinuous;
+                }
+                currentRow++;
 
-            return currentRow;
+                // Data for the initial disciplines
+                foreach (var discipline in sortedDisciplines)
+                {
+                    worksheet.Cells[currentRow, 1].Value = discipline.Name;
+                    worksheet.Cells[currentRow, 2].Value = discipline.Semester;
+                    worksheet.Cells[currentRow, 3].Value = discipline.MinWorkload;
+                    worksheet.Cells[currentRow, 4].Value = discipline.MaxWorkload;
+                    currentRow++;
+                }
+                
+                worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+
+                await package.SaveAsAsync(new FileInfo(filePath));
+            }
         }
 
-        public static void ShowParsingInfo(List<Discipline> disciplines, Dictionary<string, int> parsingStats)
+        public static async Task SaveResultsToExcelAsync(string filePath, List<Discipline> disciplines, Dictionary<string, double> bestVariant, List<Dictionary<string, double>> topVariants)
         {
-            var semesterGroups = disciplines.GroupBy(d => d.Semester).OrderBy(g => g.Key);
-            var fixedDisciplines = disciplines.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) < 0.001).Count();
-            var variableDisciplines = disciplines.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) > 0.001).Count();
-            
-            var infoText = new StringBuilder();
-            infoText.AppendLine("ИНФОРМАЦИЯ О ЗАГРУЖЕННЫХ ДАННЫХ:");
-            infoText.AppendLine();
-            
-            infoText.AppendLine("СТАТИСТИКА ПАРСИНГА:");
-            foreach (var stat in parsingStats)
+            ExcelPackage.License.SetNonCommercialPersonal("<My Name>"); 
+            using (var package = new ExcelPackage())
             {
-                infoText.AppendLine($"{stat.Key}: {stat.Value}");
+                var worksheet = package.Workbook.Worksheets.Add("Результаты");
+                int currentRow = 1;
+
+                var sortedDisciplines = disciplines.OrderBy(d => d.Semester).ThenBy(d => d.Name).ToList();
+
+                int maxVariantsToSave = Math.Min(topVariants.Count, 100); 
+
+                for (int i = 0; i < maxVariantsToSave; i++)
+                {
+                    // topVariants is now List<Dictionary<string, double>>
+                    var variantDict = topVariants[i]; 
+
+                    // Variant Header - removed objective
+                    worksheet.Cells[currentRow, 1].Value = $"Вариант {i + 1}";
+                    worksheet.Cells[currentRow, 1, currentRow, 3].Merge = true; 
+                    worksheet.Cells[currentRow, 1].Style.Font.Bold = true;
+                    worksheet.Cells[currentRow, 1].Style.Font.Size = 14;
+                    worksheet.Cells[currentRow, 1].Style.HorizontalAlignment = ExcelHorizontalAlignment.Center;
+                    
+                    // Highlight the first variant (considered "best" by order of generation/selection)
+                    if (i == 0 && variantDict == bestVariant) // Check if it's the designated bestVariant
+                    {
+                        worksheet.Cells[currentRow, 1].Style.Fill.PatternType = ExcelFillStyle.Solid;
+                        worksheet.Cells[currentRow, 1].Style.Fill.BackgroundColor.SetColor(Color.Gold);
+                    }
+                    currentRow++;
+
+                    // Column Headers for this variant block
+                    worksheet.Cells[currentRow, 1].Value = "Название дисциплины";
+                    worksheet.Cells[currentRow, 2].Value = "Семестр";
+                    worksheet.Cells[currentRow, 3].Value = "Трудоемкость";
+                    
+                    using (var range = worksheet.Cells[currentRow, 1, currentRow, 3])
+                    {
+                        range.Style.Font.Bold = true;
+                        range.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                        range.Style.Fill.BackgroundColor.SetColor(Color.LightGray);
+                        range.Style.HorizontalAlignment = ExcelHorizontalAlignment.CenterContinuous;
+                    }
+                    currentRow++;
+
+                    // Data for this variant
+                    foreach (var discipline in sortedDisciplines)
+                    {
+                        worksheet.Cells[currentRow, 1].Value = discipline.Name;
+                        worksheet.Cells[currentRow, 2].Value = discipline.Semester;
+
+                        if (variantDict.TryGetValue(discipline.UniqueName, out double workload))
+                        {
+                            worksheet.Cells[currentRow, 3].Value = workload;
+                        }
+                        else
+                        {
+                            worksheet.Cells[currentRow, 3].Value = "N/A"; 
+                        }
+                        currentRow++;
+                    }
+                    
+                    currentRow++; 
+                }
+
+                worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+
+                await package.SaveAsAsync(new FileInfo(filePath));
             }
-            infoText.AppendLine();
-            
-            infoText.AppendLine($"Всего дисциплин: {disciplines.Count}");
-            infoText.AppendLine($"Фиксированных дисциплин: {fixedDisciplines}");
-            infoText.AppendLine($"Переменных дисциплин: {variableDisciplines}");
-            infoText.AppendLine();
-            
-            infoText.AppendLine("РАСПРЕДЕЛЕНИЕ ПО СЕМЕСТРАМ:");
-            foreach (var group in semesterGroups)
-            {
-                var semesterFixed = group.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) < 0.001).Count();
-                var semesterVariable = group.Where(d => Math.Abs(d.MinWorkload - d.MaxWorkload) > 0.001).Count();
-                infoText.AppendLine($"Семестр {group.Key}: {group.Count()} дисциплин (фикс: {semesterFixed}, вар: {semesterVariable})");
-            }
-            infoText.AppendLine();
-            
-            infoText.AppendLine("ДИАПАЗОНЫ ТРУДОЕМКОСТИ:");
-            var minWorkload = disciplines.Min(d => d.MinWorkload);
-            var maxWorkload = disciplines.Max(d => d.MaxWorkload);
-            var avgSignificance = disciplines.Average(d => d.SignificanceCoefficient);
-            
-            infoText.AppendLine($"Минимальная трудоемкость: {minWorkload:F1}");
-            infoText.AppendLine($"Максимальная трудоемкость: {maxWorkload:F1}");
-            infoText.AppendLine($"Средний коэффициент значимости: {avgSignificance:F3}");
-            
-            MessageBox.Show(infoText.ToString(), "Информация о загруженных данных", 
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
     }
 }

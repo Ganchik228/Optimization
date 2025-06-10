@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Danila\\Documents\\Repoes\\Optimization\\Optimizations.csproj": {}
+    "C:\\Users\\Danila\\Documents\\Repoes\\opt\\Optimization\\Optimizations.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Danila\\Documents\\Repoes\\Optimization\\Optimizations.csproj": {
+    "C:\\Users\\Danila\\Documents\\Repoes\\opt\\Optimization\\Optimizations.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Danila\\Documents\\Repoes\\Optimization\\Optimizations.csproj",
+        "projectUniqueName": "C:\\Users\\Danila\\Documents\\Repoes\\opt\\Optimization\\Optimizations.csproj",
         "projectName": "Optimizations",
-        "projectPath": "C:\\Users\\Danila\\Documents\\Repoes\\Optimization\\Optimizations.csproj",
+        "projectPath": "C:\\Users\\Danila\\Documents\\Repoes\\opt\\Optimization\\Optimizations.csproj",
         "packagesPath": "C:\\Users\\Danila\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Danila\\Documents\\Repoes\\Optimization\\obj\\",
+        "outputPath": "C:\\Users\\Danila\\Documents\\Repoes\\opt\\Optimization\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

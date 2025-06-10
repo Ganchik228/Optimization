@@ -50,7 +50,7 @@ namespace Optimizations
             this.labelInstruction.AutoSize = true;
             this.labelInstruction.Location = new System.Drawing.Point(12, 9);
             this.labelInstruction.Name = "labelInstruction";
-            this.labelInstruction.Size = new System.Drawing.Size(294, 15);
+            this.labelInstruction.Size = new System.Drawing.Size(267, 15);
             this.labelInstruction.TabIndex = 1;
             this.labelInstruction.Text = "Выберите дисциплины для исключения из подсчета:";
             // 
@@ -88,12 +88,10 @@ namespace Optimizations
             this.Controls.Add(this.buttonOk);
             this.Controls.Add(this.labelInstruction);
             this.Controls.Add(this.checkedListBoxDisciplines);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.MinimumSize = new System.Drawing.Size(300, 200);
             this.Name = "ExcludeDisciplinesForm";
-            this.ShowIcon = false;
-            this.ShowInTaskbar = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Исключить дисциплины";
             this.ResumeLayout(false);

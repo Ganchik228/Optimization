@@ -8,12 +8,16 @@ namespace Optimizations
 {
     public class Discipline
     {
-        public string Name { get; set; } = "";
+        public string Name { get; set; }
         public double MinWorkload { get; set; }
         public double MaxWorkload { get; set; }
         public double SignificanceCoefficient { get; set; }
         public int Semester { get; set; }
-        public int Index { get; set; }
-        public string UniqueName => $"{Name} (семестр {Semester}) - {Index}";
+        public string UniqueName => $"{Name} (семестр {Semester})";
+
+        public Discipline(string name)
+        {
+            Name = name;
+        }
     }
 }

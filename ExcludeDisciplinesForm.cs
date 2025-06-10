@@ -14,23 +14,29 @@ namespace Optimizations
     {
         public HashSet<string> ExcludedDisciplineNames { get; private set; }
 
-        public ExcludeDisciplinesForm(List<Discipline> disciplines)
+        public ExcludeDisciplinesForm(List<Discipline> disciplines, HashSet<string> previouslyExcluded)
         {
             InitializeComponent();
-            ExcludedDisciplineNames = new HashSet<string>();
+            ExcludedDisciplineNames = new HashSet<string>(previouslyExcluded); // Initialize with previous exclusions
 
-            var distinctNames = disciplines.Select(d => d.Name).Distinct().OrderBy(name => name).ToList();
-            foreach (var name in distinctNames)
+            // Populate checkedListBoxDisciplines
+            checkedListBoxDisciplines.Items.Clear();
+            var distinctDisciplineNames = disciplines.Select(d => d.Name).Distinct().OrderBy(name => name).ToList();
+            foreach (var disciplineName in distinctDisciplineNames)
             {
-                checkedListBoxDisciplines.Items.Add(name, false);
+                checkedListBoxDisciplines.Items.Add(disciplineName, ExcludedDisciplineNames.Contains(disciplineName));
             }
         }
 
         private void buttonOk_Click(object sender, EventArgs e)
         {
+            ExcludedDisciplineNames.Clear();
             foreach (var item in checkedListBoxDisciplines.CheckedItems)
             {
-                ExcludedDisciplineNames.Add(item.ToString());
+                if (item != null) // Add null check here
+                {
+                    ExcludedDisciplineNames.Add(item.ToString()!); // Null-forgiving operator as we've checked for null
+                }
             }
             this.DialogResult = DialogResult.OK;
             this.Close();
